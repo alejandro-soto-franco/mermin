@@ -155,6 +155,23 @@ mermin extracts three independent orientational measurements per cell, each with
 
 Agreement or disagreement between these layers is itself diagnostic. A TGF-beta-treated myofibroblast shows concordance across all three. A ROCK-inhibited cell may show a round shape (low shape k=2) but residual internal fiber alignment (higher internal k=2).
 
+## Performance
+
+All numerics run in Rust with rayon parallelization. Benchmarked against scikit-image, scipy, shapely, and numpy on a 16-thread AMD Ryzen CPU:
+
+| Operation | mermin | Reference | Speedup |
+|-----------|--------|-----------|---------|
+| Structure tensor (1000x1000, sigma=4) | 31 ms | scikit-image 73 ms | **2.4x faster** |
+| Multiscale structure tensor (1000x1000, 6 scales) | 234 ms | scikit-image 823 ms | **3.5x faster** |
+| Structure tensor at microscopy scale (4015x4015) | 688 ms | scikit-image 1793 ms | **2.6x faster** |
+| Nuclear ellipse fitting (200 nuclei) | 0.7 ms | scikit-image regionprops 22 ms | **31x faster** |
+| Orientational correlation G_k(r) (1000 cells) | 4.8 ms | numpy 426 ms | **88x faster** |
+| Shape analysis (500 cells, full descriptors) | 51 ms | shapely (area+perim only) 13 ms | 4x slower, but computes 10x more per cell |
+
+The structure tensor pipeline (Scharr gradient, fused triple Gaussian blur, eigendecomposition) is parallelized end-to-end via rayon with `unsafe` interior-pixel fast paths. Shape analysis computes Minkowski tensors, Fourier spectrum, convexity, and k-atic modes for every cell in a single pass.
+
+Precision: polygon area and perimeter match shapely to machine precision (rel err = 0). Frank energy splay/bend agreement with numpy at rel err < 1e-14.
+
 ## Dependencies
 
 mermin builds on the [cartan](https://crates.io/crates/cartan) ecosystem for differential geometry:
