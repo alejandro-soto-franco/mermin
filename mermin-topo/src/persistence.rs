@@ -162,16 +162,20 @@ pub fn compute_persistence(
                             let mut merged = Vec::new();
                             let (mut a, mut b) = (0, 0);
                             while a < columns[j].len() && b < other.len() {
-                                if columns[j][a] < other[b] {
-                                    merged.push(columns[j][a]);
-                                    a += 1;
-                                } else if columns[j][a] > other[b] {
-                                    merged.push(other[b]);
-                                    b += 1;
-                                } else {
-                                    // Cancel (mod 2)
-                                    a += 1;
-                                    b += 1;
+                                match columns[j][a].cmp(&other[b]) {
+                                    std::cmp::Ordering::Less => {
+                                        merged.push(columns[j][a]);
+                                        a += 1;
+                                    }
+                                    std::cmp::Ordering::Greater => {
+                                        merged.push(other[b]);
+                                        b += 1;
+                                    }
+                                    std::cmp::Ordering::Equal => {
+                                        // Cancel (mod 2)
+                                        a += 1;
+                                        b += 1;
+                                    }
                                 }
                             }
                             while a < columns[j].len() {
