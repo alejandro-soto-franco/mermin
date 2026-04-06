@@ -1,6 +1,6 @@
 // mermin-orient/src/multiscale.rs
 
-use crate::structure_tensor::{structure_tensor, StructureTensorResult};
+use crate::structure_tensor::{StructureTensorResult, structure_tensor};
 use mermin_core::{ImageField, Real};
 
 /// Multiscale structure tensor analysis at logarithmically spaced scales.
@@ -13,10 +13,7 @@ pub struct MultiscaleResult {
 ///
 /// Default scales: [1, 2, 4, 8, 16, 32] pixels.
 /// For each scale, produces theta(x, sigma) and coherence(x, sigma) fields.
-pub fn multiscale_structure_tensor(
-    image: &ImageField,
-    sigmas: &[Real],
-) -> MultiscaleResult {
+pub fn multiscale_structure_tensor(image: &ImageField, sigmas: &[Real]) -> MultiscaleResult {
     let scales = sigmas
         .iter()
         .map(|&sigma| (sigma, structure_tensor(image, sigma)))

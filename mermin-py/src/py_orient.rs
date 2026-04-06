@@ -127,7 +127,5 @@ pub fn fit_nuclear_ellipses(
 }
 
 fn to_2d(data: &[f64], h: usize, w: usize) -> Vec<Vec<f64>> {
-    (0..h)
-        .map(|r| data[r * w..(r + 1) * w].to_vec())
-        .collect()
+    (0..h).map(|r| data[r * w..(r + 1) * w].to_vec()).collect()
 }

@@ -7,9 +7,9 @@ pub mod katic_field;
 pub mod multiscale;
 pub mod structure_tensor;
 
-pub use cell_orientation::{fit_nuclear_ellipse, NuclearEllipse};
+pub use cell_orientation::{NuclearEllipse, fit_nuclear_ellipse};
 pub use gaussian::gaussian_blur;
 pub use gradient::scharr_gradient;
-pub use katic_field::{katic_order_field, mean_katic_order, KAticField};
-pub use multiscale::{multiscale_structure_tensor, optimal_scale_map, MultiscaleResult};
-pub use structure_tensor::{structure_tensor, StructureTensorResult};
+pub use katic_field::{KAticField, katic_order_field, mean_katic_order};
+pub use multiscale::{MultiscaleResult, multiscale_structure_tensor, optimal_scale_map};
+pub use structure_tensor::{StructureTensorResult, structure_tensor};

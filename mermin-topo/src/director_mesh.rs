@@ -33,6 +33,9 @@ mod tests {
         let id = SMatrix::<Real, 3, 3>::identity();
         assert!((rtr - id).norm() < 1e-12, "frame should be orthogonal");
         // det should be +1
-        assert!((frame.determinant() - 1.0).abs() < 1e-12, "det should be +1");
+        assert!(
+            (frame.determinant() - 1.0).abs() < 1e-12,
+            "det should be +1"
+        );
     }
 }

@@ -52,9 +52,7 @@ pub fn orientational_correlation(
         }
     }
 
-    let r_bins: Vec<Real> = (0..n_bins)
-        .map(|i| (i as Real + 0.5) * bin_width)
-        .collect();
+    let r_bins: Vec<Real> = (0..n_bins).map(|i| (i as Real + 0.5) * bin_width).collect();
 
     let g_values: Vec<Real> = sums
         .iter()

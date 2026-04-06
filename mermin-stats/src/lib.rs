@@ -6,6 +6,6 @@ pub mod permutation;
 pub mod ripley;
 
 pub use bootstrap::{confidence_interval, spatial_block_bootstrap};
-pub use correlation::{orientational_correlation, CorrelationResult};
-pub use permutation::{permutation_test, PermutationTestResult};
-pub use ripley::{ripley_k, RipleyResult};
+pub use correlation::{CorrelationResult, orientational_correlation};
+pub use permutation::{PermutationTestResult, permutation_test};
+pub use ripley::{RipleyResult, ripley_k};

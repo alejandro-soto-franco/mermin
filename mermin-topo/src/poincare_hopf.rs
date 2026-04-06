@@ -28,8 +28,16 @@ mod tests {
     #[test]
     fn balanced_charges() {
         let defects = vec![
-            Defect { position: [1.0, 1.0], charge: 0.5, angle: 3.0 },
-            Defect { position: [5.0, 5.0], charge: 0.5, angle: 3.0 },
+            Defect {
+                position: [1.0, 1.0],
+                charge: 0.5,
+                angle: 3.0,
+            },
+            Defect {
+                position: [5.0, 5.0],
+                charge: 0.5,
+                angle: 3.0,
+            },
         ];
         let (sum, chi, valid) = validate_poincare_hopf(&defects, 1, 0.1);
         assert_eq!(chi, 1);

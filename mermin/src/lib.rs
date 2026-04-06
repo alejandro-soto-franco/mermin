@@ -13,6 +13,6 @@ pub use mermin_topo as topo;
 
 // Re-export most-used types at crate root
 pub use mermin_core::{
-    BoundaryContour, CellRecord, ImageField, KValue, MerminError, Point2, Real, Result,
-    K_HEXATIC, K_NEMATIC, K_POLAR, K_TETRATIC,
+    BoundaryContour, CellRecord, ImageField, K_HEXATIC, K_NEMATIC, K_POLAR, K_TETRATIC, KValue,
+    MerminError, Point2, Real, Result,
 };

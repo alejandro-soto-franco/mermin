@@ -1,7 +1,7 @@
 // mermin-py/src/py_theory.rs
 
 use mermin_theory::{
-    build_volterra_params, estimate_ldg_params, frank_energy, to_json, FrankEnergy, LdGParams,
+    FrankEnergy, LdGParams, build_volterra_params, estimate_ldg_params, frank_energy, to_json,
 };
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
@@ -78,22 +78,13 @@ pub fn build_volterra_params_py(
     n_defects: usize,
     image_area_um2: f64,
 ) -> PyResult<PyObject> {
-    let ldg = LdGParams {
-        a,
-        b,
-        c,
-        k_elastic,
-    };
+    let ldg = LdGParams { a, b, c, k_elastic };
     let ratio = if bend > 1e-15 {
         splay / bend
     } else {
         f64::INFINITY
     };
-    let frank = FrankEnergy {
-        splay,
-        bend,
-        ratio,
-    };
+    let frank = FrankEnergy { splay, bend, ratio };
 
     let params = build_volterra_params(&ldg, &frank, n_defects, image_area_um2);
     let json_str = to_json(&params);

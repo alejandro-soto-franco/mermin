@@ -133,7 +133,10 @@ mod tests {
             .collect();
         let contour = BoundaryContour::new(pts).unwrap();
         let (elong, _) = elongation_from_w1_tensor(&minkowski_w1_tensor(&contour));
-        assert!(elong < 0.01, "circle should have near-zero elongation, got {elong}");
+        assert!(
+            elong < 0.01,
+            "circle should have near-zero elongation, got {elong}"
+        );
     }
 
     #[test]
@@ -153,6 +156,9 @@ mod tests {
         // Actually: W1 tensor eigenvector for *largest* eigenvalue is the direction
         // with most boundary normal contribution, which for a 4:1 rect is y-direction
         // (the two long edges contribute normals in y). So angle ~ pi/2.
-        assert!(elong > 0.3, "4:1 rectangle should be significantly elongated, got {elong}");
+        assert!(
+            elong > 0.3,
+            "4:1 rectangle should be significantly elongated, got {elong}"
+        );
     }
 }

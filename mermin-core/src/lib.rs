@@ -12,4 +12,4 @@ pub use cell::CellRecord;
 pub use contour::BoundaryContour;
 pub use error::{MerminError, Result};
 pub use field::ImageField;
-pub use types::{KValue, Point2, Real, K_HEXATIC, K_NEMATIC, K_POLAR, K_TETRATIC};
+pub use types::{K_HEXATIC, K_NEMATIC, K_POLAR, K_TETRATIC, KValue, Point2, Real};
