@@ -68,11 +68,7 @@ pub fn structure_tensor(image: &ImageField, sigma: Real) -> StructureTensorResul
 
         // Coherence
         let sum = l1 + l2;
-        coherence.data[i] = if sum > 1e-15 {
-            (l1 - l2) / sum
-        } else {
-            0.0
-        };
+        coherence.data[i] = if sum > 1e-15 { (l1 - l2) / sum } else { 0.0 };
 
         // Orientation: angle of the minor eigenvector (perpendicular to gradient direction).
         // For structure tensor, the orientation of the *structure* (fiber direction)
@@ -112,11 +108,7 @@ mod tests {
         let w = 100;
         let h = 100;
         let data: Vec<Real> = (0..h)
-            .flat_map(|_| {
-                (0..w).map(|c| {
-                    (2.0 * std::f64::consts::PI * c as Real / 10.0).sin()
-                })
-            })
+            .flat_map(|_| (0..w).map(|c| (2.0 * std::f64::consts::PI * c as Real / 10.0).sin()))
             .collect();
         let field = ImageField::new(data, w, h);
         let result = structure_tensor(&field, 3.0);

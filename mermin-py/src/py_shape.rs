@@ -54,8 +54,5 @@ pub fn analyze_shapes_batch(
     py: Python<'_>,
     contours: Vec<PyReadonlyArray2<'_, f64>>,
 ) -> PyResult<Vec<PyObject>> {
-    contours
-        .into_iter()
-        .map(|c| analyze_shape(py, c))
-        .collect()
+    contours.into_iter().map(|c| analyze_shape(py, c)).collect()
 }

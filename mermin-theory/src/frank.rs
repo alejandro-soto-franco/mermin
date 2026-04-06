@@ -35,14 +35,10 @@ pub fn frank_energy(thetas: &[Real], nx: usize, ny: usize, dx: Real) -> FrankEne
             let idx = |r: usize, c: usize| thetas[r * nx + c];
 
             // Central differences for cos(theta) and sin(theta)
-            let dcos_dx =
-                (idx(row, col + 1).cos() - idx(row, col - 1).cos()) / dx2;
-            let dsin_dy =
-                (idx(row + 1, col).sin() - idx(row - 1, col).sin()) / dx2;
-            let dsin_dx =
-                (idx(row, col + 1).sin() - idx(row, col - 1).sin()) / dx2;
-            let dcos_dy =
-                (idx(row + 1, col).cos() - idx(row - 1, col).cos()) / dx2;
+            let dcos_dx = (idx(row, col + 1).cos() - idx(row, col - 1).cos()) / dx2;
+            let dsin_dy = (idx(row + 1, col).sin() - idx(row - 1, col).sin()) / dx2;
+            let dsin_dx = (idx(row, col + 1).sin() - idx(row, col - 1).sin()) / dx2;
+            let dcos_dy = (idx(row + 1, col).cos() - idx(row - 1, col).cos()) / dx2;
 
             let s = dcos_dx + dsin_dy; // div n
             let b = dsin_dx - dcos_dy; // (curl n) . z

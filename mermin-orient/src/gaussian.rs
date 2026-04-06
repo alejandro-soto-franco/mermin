@@ -10,10 +10,10 @@ fn gaussian_kernel(sigma: Real) -> Vec<Real> {
     let two_sigma_sq = 2.0 * sigma * sigma;
     let mut sum = 0.0;
 
-    for i in 0..size {
+    for (i, k) in kernel.iter_mut().enumerate().take(size) {
         let x = i as Real - radius as Real;
-        kernel[i] = (-x * x / two_sigma_sq).exp();
-        sum += kernel[i];
+        *k = (-x * x / two_sigma_sq).exp();
+        sum += *k;
     }
 
     // Normalize
@@ -97,6 +97,9 @@ mod tests {
         // Peak should be reduced
         assert!(blurred.get(10, 10) < 0.5, "delta peak should be smoothed");
         // Neighbors should be positive
-        assert!(blurred.get(10, 11) > 0.0, "neighbors should get some signal");
+        assert!(
+            blurred.get(10, 11) > 0.0,
+            "neighbors should get some signal"
+        );
     }
 }

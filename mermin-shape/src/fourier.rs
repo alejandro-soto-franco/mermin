@@ -86,7 +86,17 @@ mod tests {
         let contour = BoundaryContour::new(pts).unwrap();
         let spec = fourier_spectrum(&contour);
         // k=2 should dominate
-        assert!(spec[1] > spec[0], "ellipse: k=2 ({}) > k=1 ({})", spec[1], spec[0]);
-        assert!(spec[1] > spec[2], "ellipse: k=2 ({}) > k=3 ({})", spec[1], spec[2]);
+        assert!(
+            spec[1] > spec[0],
+            "ellipse: k=2 ({}) > k=1 ({})",
+            spec[1],
+            spec[0]
+        );
+        assert!(
+            spec[1] > spec[2],
+            "ellipse: k=2 ({}) > k=3 ({})",
+            spec[1],
+            spec[2]
+        );
     }
 }

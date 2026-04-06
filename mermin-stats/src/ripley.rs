@@ -23,11 +23,7 @@ pub struct RipleyResult {
 /// `points`: point positions.
 /// `bbox`: bounding box [x_min, y_min, x_max, y_max].
 /// `r_values`: distances at which to evaluate K.
-pub fn ripley_k(
-    points: &[Point2],
-    bbox: [Real; 4],
-    r_values: &[Real],
-) -> RipleyResult {
+pub fn ripley_k(points: &[Point2], bbox: [Real; 4], r_values: &[Real]) -> RipleyResult {
     let n = points.len();
     let area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
     let nf = n as Real;

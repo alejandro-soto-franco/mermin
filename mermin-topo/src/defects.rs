@@ -36,10 +36,7 @@ pub fn detect_defects(
     // For k=2 (nematic), the angles are used directly.
     // For k=1 (polar), double the angles so +-1 defects map to +-pi rotations.
     // For k=6 (hexatic), multiply by 3 so +-1/6 defects map to +-pi/2.
-    let scaled_thetas: Vec<Real> = thetas
-        .iter()
-        .map(|&t| t * (k as Real) / 2.0)
-        .collect();
+    let scaled_thetas: Vec<Real> = thetas.iter().map(|&t| t * (k as Real) / 2.0).collect();
 
     let frames = directors_to_frames(&scaled_thetas);
     let disclinations = scan_disclinations(&frames, nx, ny, threshold);
@@ -55,11 +52,7 @@ pub fn detect_defects(
             // Charge: for nematic, angle ~ pi means +/- 1/2.
             // Sign from the holonomy trace: if the off-diagonal is positive,
             // the rotation is CCW (+1/2), otherwise CW (-1/2).
-            let sign = if d.holonomy[(1, 0)] >= 0.0 {
-                1.0
-            } else {
-                -1.0
-            };
+            let sign = if d.holonomy[(1, 0)] >= 0.0 { 1.0 } else { -1.0 };
             let charge = sign * 0.5 * 2.0 / (k as Real);
 
             Defect {

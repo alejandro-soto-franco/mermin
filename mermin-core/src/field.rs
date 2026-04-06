@@ -13,8 +13,16 @@ pub struct ImageField {
 
 impl ImageField {
     pub fn new(data: Vec<Real>, width: usize, height: usize) -> Self {
-        assert_eq!(data.len(), width * height, "data length must equal width * height");
-        Self { data, width, height }
+        assert_eq!(
+            data.len(),
+            width * height,
+            "data length must equal width * height"
+        );
+        Self {
+            data,
+            width,
+            height,
+        }
     }
 
     pub fn zeros(width: usize, height: usize) -> Self {

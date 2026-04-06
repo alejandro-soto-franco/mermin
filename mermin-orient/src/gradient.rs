@@ -20,19 +20,17 @@ pub fn scharr_gradient(field: &ImageField) -> (ImageField, ImageField) {
         for col in 1..w - 1 {
             let v = |r: usize, c: usize| field.get(r, c);
 
-            let dx = -3.0 * v(row - 1, col - 1)
-                + 3.0 * v(row - 1, col + 1)
+            let dx = -3.0 * v(row - 1, col - 1) + 3.0 * v(row - 1, col + 1)
                 - 10.0 * v(row, col - 1)
                 + 10.0 * v(row, col + 1)
                 - 3.0 * v(row + 1, col - 1)
                 + 3.0 * v(row + 1, col + 1);
 
-            let dy = -3.0 * v(row - 1, col - 1)
-                - 10.0 * v(row - 1, col)
-                - 3.0 * v(row - 1, col + 1)
-                + 3.0 * v(row + 1, col - 1)
-                + 10.0 * v(row + 1, col)
-                + 3.0 * v(row + 1, col + 1);
+            let dy =
+                -3.0 * v(row - 1, col - 1) - 10.0 * v(row - 1, col) - 3.0 * v(row - 1, col + 1)
+                    + 3.0 * v(row + 1, col - 1)
+                    + 10.0 * v(row + 1, col)
+                    + 3.0 * v(row + 1, col + 1);
 
             *gx.get_mut(row, col) = dx * norm;
             *gy.get_mut(row, col) = dy * norm;
@@ -51,9 +49,7 @@ mod tests {
         // Image with horizontal ramp: I(r,c) = c
         let w = 20;
         let h = 20;
-        let data: Vec<Real> = (0..h)
-            .flat_map(|_| (0..w).map(|c| c as Real))
-            .collect();
+        let data: Vec<Real> = (0..h).flat_map(|_| (0..w).map(|c| c as Real)).collect();
         let field = ImageField::new(data, w, h);
         let (gx, gy) = scharr_gradient(&field);
 

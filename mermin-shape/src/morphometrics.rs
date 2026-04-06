@@ -88,7 +88,10 @@ mod tests {
         let contour = BoundaryContour::new(pts).unwrap();
         let p0 = shape_index(&contour);
         let expected = 2.0 * std::f64::consts::PI.sqrt();
-        assert!((p0 - expected).abs() < 0.05, "circle shape index ~ 3.545, got {p0}");
+        assert!(
+            (p0 - expected).abs() < 0.05,
+            "circle shape index ~ 3.545, got {p0}"
+        );
     }
 
     #[test]
@@ -101,6 +104,9 @@ mod tests {
         ])
         .unwrap();
         let c = convexity(&contour);
-        assert!((c - 1.0).abs() < 1e-10, "square convexity should be 1.0, got {c}");
+        assert!(
+            (c - 1.0).abs() < 1e-10,
+            "square convexity should be 1.0, got {c}"
+        );
     }
 }

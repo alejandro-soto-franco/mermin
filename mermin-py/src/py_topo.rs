@@ -2,7 +2,7 @@
 
 use mermin_topo::{
     compute_persistence,
-    defects::{detect_defects, Defect},
+    defects::{Defect, detect_defects},
     poincare_hopf::validate_poincare_hopf,
 };
 use numpy::PyReadonlyArray1;

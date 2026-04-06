@@ -29,7 +29,11 @@ pub struct PersistenceDiagram {
 impl PersistenceDiagram {
     /// Filter to only pairs of a given dimension.
     pub fn dimension(&self, dim: usize) -> Vec<PersistencePair> {
-        self.pairs.iter().filter(|p| p.dimension == dim).copied().collect()
+        self.pairs
+            .iter()
+            .filter(|p| p.dimension == dim)
+            .copied()
+            .collect()
     }
 }
 
@@ -120,12 +124,7 @@ pub fn compute_persistence(
     }
 
     // Sort by (filtration value, dimension) for the filtration order
-    simplices.sort_by(|a, b| {
-        a.filt
-            .partial_cmp(&b.filt)
-            .unwrap()
-            .then(a.dim.cmp(&b.dim))
-    });
+    simplices.sort_by(|a, b| a.filt.partial_cmp(&b.filt).unwrap().then(a.dim.cmp(&b.dim)));
 
     // Build permutation: global_idx -> filtration_order
     let mut order_map = vec![0usize; n_total];
@@ -136,11 +135,7 @@ pub fn compute_persistence(
     // Boundary matrix in filtration order (columns are simplices, entries are boundary indices)
     let mut columns: Vec<Vec<usize>> = Vec::with_capacity(n_total);
     for s in &simplices {
-        let mut col: Vec<usize> = s
-            .boundary
-            .iter()
-            .map(|&gi| order_map[gi])
-            .collect();
+        let mut col: Vec<usize> = s.boundary.iter().map(|&gi| order_map[gi]).collect();
         col.sort();
         columns.push(col);
     }

@@ -30,9 +30,10 @@ impl BoundaryContour {
     /// Centroid of the polygon (average of vertices).
     pub fn centroid(&self) -> Point2 {
         let n = self.points.len() as Real;
-        let (sx, sy) = self.points.iter().fold((0.0, 0.0), |(sx, sy), p| {
-            (sx + p.x, sy + p.y)
-        });
+        let (sx, sy) = self
+            .points
+            .iter()
+            .fold((0.0, 0.0), |(sx, sy), p| (sx + p.x, sy + p.y));
         Point2::new(sx / n, sy / n)
     }
 
@@ -57,9 +58,7 @@ impl BoundaryContour {
     pub fn perimeter(&self) -> Real {
         let pts = &self.points;
         let n = pts.len();
-        (0..n)
-            .map(|i| pts[i].distance_to(pts[(i + 1) % n]))
-            .sum()
+        (0..n).map(|i| pts[i].distance_to(pts[(i + 1) % n])).sum()
     }
 }
 

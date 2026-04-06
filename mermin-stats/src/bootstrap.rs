@@ -31,8 +31,14 @@ where
     assert_eq!(n, positions.len());
 
     // Assign each cell to a block
-    let x_min = positions.iter().map(|p| p.0).fold(Real::INFINITY, Real::min);
-    let y_min = positions.iter().map(|p| p.1).fold(Real::INFINITY, Real::min);
+    let x_min = positions
+        .iter()
+        .map(|p| p.0)
+        .fold(Real::INFINITY, Real::min);
+    let y_min = positions
+        .iter()
+        .map(|p| p.1)
+        .fold(Real::INFINITY, Real::min);
 
     let block_of = |i: usize| -> (i64, i64) {
         let bx = ((positions[i].0 - x_min) / block_size).floor() as i64;
@@ -110,6 +116,9 @@ mod tests {
 
         let (lo, hi) = confidence_interval(&dist, 0.95);
         let true_mean = 49.5;
-        assert!(lo < true_mean && hi > true_mean, "95% CI [{lo}, {hi}] should contain true mean {true_mean}");
+        assert!(
+            lo < true_mean && hi > true_mean,
+            "95% CI [{lo}, {hi}] should contain true mean {true_mean}"
+        );
     }
 }
