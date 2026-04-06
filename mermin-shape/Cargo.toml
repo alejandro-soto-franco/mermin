@@ -1,0 +1,13 @@
+[package]
+name = "mermin-shape"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Minkowski tensors and shape descriptors for cell boundaries"
+
+[dependencies]
+mermin-core = { workspace = true }
+nalgebra = { workspace = true }

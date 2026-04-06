@@ -1,0 +1,16 @@
+[package]
+name = "mermin-topo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Topological defect detection and persistent homology"
+
+[dependencies]
+mermin-core = { workspace = true }
+cartan-geo = { workspace = true }
+cartan-manifolds = { workspace = true }
+nalgebra = { workspace = true }
+serde = { workspace = true }
