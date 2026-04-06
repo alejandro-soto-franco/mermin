@@ -30,6 +30,9 @@ mermin-tests/data/**/*.tiff
 *.swp
 *.swo
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db
