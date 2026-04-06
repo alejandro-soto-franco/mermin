@@ -1,1 +1,15 @@
 //! Multiscale structure tensor, k-atic order parameter fields, and cell orientation.
+
+pub mod cell_orientation;
+pub mod gaussian;
+pub mod gradient;
+pub mod katic_field;
+pub mod multiscale;
+pub mod structure_tensor;
+
+pub use cell_orientation::{fit_nuclear_ellipse, NuclearEllipse};
+pub use gaussian::gaussian_blur;
+pub use gradient::scharr_gradient;
+pub use katic_field::{katic_order_field, mean_katic_order, KAticField};
+pub use multiscale::{multiscale_structure_tensor, optimal_scale_map, MultiscaleResult};
+pub use structure_tensor::{structure_tensor, StructureTensorResult};
