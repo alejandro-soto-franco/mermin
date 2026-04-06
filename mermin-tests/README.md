@@ -65,6 +65,16 @@ Source: collaborator-provided, 2026-04-06
 - Varelas et al., "TAZ controls Smad nucleocytoplasmic shuttling and regulates human embryonic stem-cell self-renewal", Nature Cell Biology 10(7):837-48, 2008. PMID: 18568018
   - Context for TGF-beta/Smad/TAZ signaling pathway, not imaging methodology
 
+### Imaging system
+- Molecular Devices ImageXpress Pico ("Pico Sirius Max")
+- Objective: 10x Leica Fluotar air (NA 0.32)
+- Camera: Sony CMOS 5 MP (likely IMX264, 2448 x 2048, 3.45 um pixel pitch)
+- Images are 2x2 stitched montages (4015 x 4015 px)
+
 ### Pixel size
-- Not yet confirmed from microscope metadata. Estimate needed from collaborator.
-- ibidi 96-well glass-bottom plates typically imaged at 10x or 20x.
+- Estimated: 0.345 um/pixel (3.45 um sensor pitch / 10x magnification)
+- Total FOV per image: ~1.39 x 1.39 mm
+- Pending confirmation from CellReporterXpress acquisition metadata
+
+### Collaborator
+- Josh Montano (provided dataset, experimental design, and imaging metadata)
