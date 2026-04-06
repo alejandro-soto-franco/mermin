@@ -1,0 +1,17 @@
+[package]
+name = "mermin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "k-atic alignment analysis of fluorescence microscopy"
+
+[dependencies]
+mermin-core = { workspace = true }
+mermin-shape = { workspace = true }
+mermin-orient = { workspace = true }
+mermin-topo = { workspace = true }
+mermin-stats = { workspace = true }
+mermin-theory = { workspace = true }

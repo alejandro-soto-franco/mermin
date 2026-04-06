@@ -1,0 +1,18 @@
+[package]
+name = "mermin-theory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Continuum theory: Frank energy, Landau-de Gennes fitting, activity estimation"
+
+[dependencies]
+mermin-core = { workspace = true }
+mermin-orient = { workspace = true }
+cartan-optim = { workspace = true }
+cartan-core = { workspace = true }
+nalgebra = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

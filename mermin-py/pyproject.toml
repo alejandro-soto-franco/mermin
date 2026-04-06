@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "mermin"
+version = "0.1.0"
+description = "k-atic alignment analysis of fluorescence microscopy"
+requires-python = ">=3.10"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Alejandro Soto Franco" }]
+dependencies = [
+    "numpy>=1.24",
+    "polars>=0.20",
+    "cellpose>=3.0",
+    "scikit-image>=0.22",
+    "scipy>=1.12",
+    "matplotlib>=3.8",
+    "tifffile>=2024.1",
+]
+
+[tool.maturin]
+python-source = "../python"
+module-name = "mermin._native"
+features = ["pyo3/extension-module"]

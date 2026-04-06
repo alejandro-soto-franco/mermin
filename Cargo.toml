@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "mermin",
+    "mermin-core",
+    "mermin-shape",
+    "mermin-orient",
+    "mermin-topo",
+    "mermin-stats",
+    "mermin-theory",
+    "mermin-py",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alejandro-soto-franco/mermin"
+authors = ["Alejandro Soto Franco"]
+
+[workspace.dependencies]
+# Internal
+mermin-core = { path = "mermin-core", version = "0.1.0" }
+mermin-shape = { path = "mermin-shape", version = "0.1.0" }
+mermin-orient = { path = "mermin-orient", version = "0.1.0" }
+mermin-topo = { path = "mermin-topo", version = "0.1.0" }
+mermin-stats = { path = "mermin-stats", version = "0.1.0" }
+mermin-theory = { path = "mermin-theory", version = "0.1.0" }
+
+# External
+nalgebra = "0.33"
+ndarray = "0.16"
+rayon = "1.10"
+thiserror = "2"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# cartan ecosystem
+cartan-core = "0.1.7"
+cartan-manifolds = "0.1.7"
+cartan-geo = "0.1.7"
+cartan-optim = "0.1.7"
+cartan-dec = "0.1.7"
+
+# PyO3
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"
