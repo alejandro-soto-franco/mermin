@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Multiscale structure tensor and k-atic order parameter fields"
+readme = "README.md"
 
 [dependencies]
 mermin-core = { workspace = true }

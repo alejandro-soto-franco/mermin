@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Minkowski tensors and shape descriptors for cell boundaries"
+readme = "README.md"
 
 [dependencies]
 mermin-core = { workspace = true }

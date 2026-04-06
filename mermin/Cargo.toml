@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "k-atic alignment analysis of fluorescence microscopy"
+readme = "README.md"
+keywords = ["microscopy", "cell-biology", "nematic", "topology", "image-analysis"]
+categories = ["science", "mathematics"]
 
 [dependencies]
 mermin-core = { workspace = true }

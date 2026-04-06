@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Continuum theory: Frank energy, Landau-de Gennes fitting, activity estimation"
+readme = "README.md"
 
 [dependencies]
 mermin-core = { workspace = true }
