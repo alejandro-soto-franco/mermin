@@ -37,6 +37,6 @@ mermin-tests/data/**/*.tiff
 .DS_Store
 Thumbs.db
 
-# Docs (generated output, not specs)
-docs/_build/
-docs/api/
+# Docs and analysis
+docs/
+numerical-tests/

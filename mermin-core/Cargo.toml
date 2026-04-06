@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Core types and traits for k-atic alignment analysis"
+readme = "README.md"
 
 [dependencies]
 nalgebra = { workspace = true }
