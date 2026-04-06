@@ -1,7 +1,9 @@
 // mermin-orient/src/structure_tensor.rs
 
-use crate::{gaussian_blur, scharr_gradient};
+use crate::gaussian::gaussian_blur_triple;
+use crate::scharr_gradient;
 use mermin_core::{ImageField, Real};
+use rayon::prelude::*;
 
 /// Result of structure tensor analysis at a single scale.
 pub struct StructureTensorResult {
@@ -22,89 +24,96 @@ pub struct StructureTensorResult {
 ///
 /// The gradient is computed via Scharr, then the outer product components
 /// (Ix*Ix, Ix*Iy, Iy*Iy) are Gaussian-smoothed at scale sigma.
+/// All passes are parallelized with rayon.
 pub fn structure_tensor(image: &ImageField, sigma: Real) -> StructureTensorResult {
     let (gx, gy) = scharr_gradient(image);
     let (w, h) = (image.width, image.height);
+    let n = w * h;
 
     // Compute outer product components
-    let mut jxx = ImageField::zeros(w, h);
-    let mut jxy = ImageField::zeros(w, h);
-    let mut jyy = ImageField::zeros(w, h);
+    let mut jxx_data = vec![0.0_f64; n];
+    let mut jxy_data = vec![0.0_f64; n];
+    let mut jyy_data = vec![0.0_f64; n];
 
-    for i in 0..w * h {
-        let ix = gx.data[i];
-        let iy = gy.data[i];
-        jxx.data[i] = ix * ix;
-        jxy.data[i] = ix * iy;
-        jyy.data[i] = iy * iy;
-    }
+    // Parallelize the outer product computation
+    jxx_data
+        .par_iter_mut()
+        .zip(jxy_data.par_iter_mut())
+        .zip(jyy_data.par_iter_mut())
+        .enumerate()
+        .for_each(|(i, ((xx, xy), yy))| {
+            let ix = gx.data[i];
+            let iy = gy.data[i];
+            *xx = ix * ix;
+            *xy = ix * iy;
+            *yy = iy * iy;
+        });
 
-    // Smooth the tensor components
-    let jxx = gaussian_blur(&jxx, sigma);
-    let jxy = gaussian_blur(&jxy, sigma);
-    let jyy = gaussian_blur(&jyy, sigma);
+    let jxx = ImageField::new(jxx_data, w, h);
+    let jxy = ImageField::new(jxy_data, w, h);
+    let jyy = ImageField::new(jyy_data, w, h);
 
-    // Eigendecompose at each pixel
-    let mut theta = ImageField::zeros(w, h);
-    let mut coherence = ImageField::zeros(w, h);
-    let mut lambda1 = ImageField::zeros(w, h);
-    let mut lambda2 = ImageField::zeros(w, h);
+    // Smooth all three tensor components in a single fused pass
+    let (jxx, jxy, jyy) = gaussian_blur_triple(&jxx, &jxy, &jyy, sigma);
 
-    for i in 0..w * h {
-        let a = jxx.data[i];
-        let b = jxy.data[i];
-        let d = jyy.data[i];
+    // Eigendecompose at each pixel (parallel)
+    let mut theta_data = vec![0.0_f64; n];
+    let mut coherence_data = vec![0.0_f64; n];
+    let mut lambda1_data = vec![0.0_f64; n];
+    let mut lambda2_data = vec![0.0_f64; n];
 
-        // 2x2 symmetric eigendecomposition:
-        // lambda = ((a+d) +/- sqrt((a-d)^2 + 4b^2)) / 2
-        let trace = a + d;
-        let det_term = ((a - d) * (a - d) + 4.0 * b * b).sqrt();
+    theta_data
+        .par_iter_mut()
+        .zip(coherence_data.par_iter_mut())
+        .zip(lambda1_data.par_iter_mut())
+        .zip(lambda2_data.par_iter_mut())
+        .enumerate()
+        .for_each(|(i, (((th, coh), l1), l2))| {
+            let a = jxx.data[i];
+            let b = jxy.data[i];
+            let d = jyy.data[i];
 
-        let l1 = (trace + det_term) * 0.5;
-        let l2 = (trace - det_term) * 0.5;
+            let trace = a + d;
+            let det_term = ((a - d) * (a - d) + 4.0 * b * b).sqrt();
 
-        lambda1.data[i] = l1;
-        lambda2.data[i] = l2;
+            let lam1 = (trace + det_term) * 0.5;
+            let lam2 = (trace - det_term) * 0.5;
 
-        // Coherence
-        let sum = l1 + l2;
-        coherence.data[i] = if sum > 1e-15 { (l1 - l2) / sum } else { 0.0 };
+            *l1 = lam1;
+            *l2 = lam2;
 
-        // Orientation: angle of the minor eigenvector (perpendicular to gradient direction).
-        // For structure tensor, the orientation of the *structure* (fiber direction)
-        // is perpendicular to the dominant gradient direction.
-        // theta = 0.5 * atan2(2b, a - d) gives the gradient direction;
-        // we add pi/2 to get fiber direction.
-        let mut angle = 0.5 * (2.0 * b).atan2(a - d) + std::f64::consts::FRAC_PI_2;
-        // Normalize to [0, pi)
-        if angle < 0.0 {
-            angle += std::f64::consts::PI;
-        }
-        if angle >= std::f64::consts::PI {
-            angle -= std::f64::consts::PI;
-        }
-        theta.data[i] = angle;
-    }
+            let sum = lam1 + lam2;
+            *coh = if sum > 1e-15 {
+                (lam1 - lam2) / sum
+            } else {
+                0.0
+            };
+
+            let mut angle = 0.5 * (2.0 * b).atan2(a - d) + std::f64::consts::FRAC_PI_2;
+            if angle < 0.0 {
+                angle += std::f64::consts::PI;
+            }
+            if angle >= std::f64::consts::PI {
+                angle -= std::f64::consts::PI;
+            }
+            *th = angle;
+        });
 
     StructureTensorResult {
-        theta,
-        coherence,
-        lambda1,
-        lambda2,
+        theta: ImageField::new(theta_data, w, h),
+        coherence: ImageField::new(coherence_data, w, h),
+        lambda1: ImageField::new(lambda1_data, w, h),
+        lambda2: ImageField::new(lambda2_data, w, h),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mermin_core::ImageField;
 
     #[test]
     fn vertical_stripes_orientation() {
-        // Vertical stripes: I(r,c) = sin(2*pi*c/10)
-        // Structure should be oriented horizontally (theta ~ 0)
-        // because gradient is horizontal and fiber is vertical? Actually:
-        // Gradient of vertical stripes is horizontal (dI/dx).
-        // The structure (the stripes themselves) is vertical (theta ~ pi/2).
         let w = 100;
         let h = 100;
         let data: Vec<Real> = (0..h)
@@ -113,7 +122,6 @@ mod tests {
         let field = ImageField::new(data, w, h);
         let result = structure_tensor(&field, 3.0);
 
-        // Check interior pixels (avoid boundary effects)
         let mut sum_theta = 0.0;
         let mut count = 0;
         for row in 20..80 {
@@ -125,7 +133,6 @@ mod tests {
             }
         }
         let mean_theta = sum_theta / count as Real;
-        // Vertical stripes -> theta ~ pi/2
         assert!(
             (mean_theta - std::f64::consts::FRAC_PI_2).abs() < 0.3,
             "vertical stripes should give theta ~ pi/2, got {mean_theta:.3}"
