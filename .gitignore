@@ -1,0 +1,38 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+*.so
+*.dylib
+*.dll
+*.pyd
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+.venv/
+venv/
+
+# Test data (contains collaborator microscopy images, not for distribution)
+mermin-tests/*.tif
+mermin-tests/*.tiff
+mermin-tests/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (generated output, not specs)
+docs/_build/
+docs/api/
