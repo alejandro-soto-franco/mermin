@@ -4,7 +4,14 @@ This directory is gitignored. It contains collaborator-provided microscopy image
 
 ## Dataset: Human Vaginal Fibroblasts (hVFs)
 
-Source: collaborator-provided, 2026-04-06
+All collaborator datasets are organized under `data/<collaborator>/<batch>/`.
+
+## montano/postmeno-vestrogen-hVF-2026-04/
+
+Source: Josh Montano, 2026-04-06
+
+### Patient population
+- Postmenopausal women on vaginal estrogen therapy
 
 ### Cell type
 - Human vaginal fibroblasts, passage 4
@@ -43,6 +50,8 @@ Source: collaborator-provided, 2026-04-06
 - File naming: `{substrate}{well}_dv.tif`
 
 ### Available files (8 of 24 total, 1 replicate per condition x 2 substrates)
+
+Place TIFFs in `data/montano/postmeno-vestrogen-hVF-2026-04/`.
 
 | File        | Condition              | Substrate |
 |-------------|------------------------|-----------|

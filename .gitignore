@@ -21,7 +21,8 @@ venv/
 # Test data (contains collaborator microscopy images, not for distribution)
 mermin-tests/*.tif
 mermin-tests/*.tiff
-mermin-tests/data/
+mermin-tests/data/**/*.tif
+mermin-tests/data/**/*.tiff
 
 # IDE
 .idea/
