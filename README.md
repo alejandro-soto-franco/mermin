@@ -8,7 +8,7 @@
 
 # mermin
 
-**k-atic alignment analysis of fluorescence microscopy.**
+**$k$-atic alignment analysis of fluorescence microscopy.**
 
 Named after [N. David Mermin](https://en.wikipedia.org/wiki/N._David_Mermin), whose 1979 *Reviews of Modern Physics* paper "The topological theory of defects in ordered media" provides the mathematical framework this tool implements on experimental microscopy data.
 
@@ -16,20 +16,20 @@ mermin takes raw multi-channel fluorescence TIFFs (e.g. DAPI + vimentin) and pro
 
 ## Features
 
-- **Minkowski tensor shape analysis**: W_0 (area), W_1 (perimeter), W_1^{1,1} (elongation tensor), W_1^{s,0} (k-atic shape modes for k = 1, 2, 4, 6)
+- **Minkowski tensor shape analysis**: $W_0$ (area), $W_1$ (perimeter), $W_1^{1,1}$ (elongation tensor), $W_1^{s,0}$ ($k$-atic shape modes for $k = 1, 2, 4, 6$)
 - **Fourier boundary decomposition**: secondary shape descriptor for comparison with Minkowski tensors
-- **Multiscale structure tensor**: orientation and coherence fields at logarithmically spaced scales (subcellular to tissue-level)
-- **k-atic order parameter fields**: psi_k(x, sigma) = C * exp(ik * theta) for arbitrary k
+- **Multiscale structure tensor**: orientation $\theta(\mathbf{x})$ and coherence $C(\mathbf{x})$ fields at logarithmically spaced scales (subcellular to tissue-level)
+- **$k$-atic order parameter fields**: $\psi_k(\mathbf{x}, \sigma) = C \cdot e^{ik\theta}$ for arbitrary $k$
 - **Nuclear ellipse fitting**: aspect ratio and orientation from DAPI masks via moments of inertia
-- **Topological defect detection**: half-integer and integer charge defects via [cartan](https://crates.io/crates/cartan) holonomy, with Poincare-Hopf validation
+- **Topological defect detection**: half-integer and integer charge defects via [cartan](https://crates.io/crates/cartan-geo) SO(3) holonomy, with Poincar&eacute;--Hopf validation
 - **Persistent homology**: boundary matrix reduction on Delaunay filtration by ascending alignment magnitude
-- **Orientational correlation functions**: G_k(r) with exponential fit for correlation length xi_k
-- **Ripley's K-function**: spatial clustering analysis for defect point patterns
+- **Orientational correlation functions**: $G_k(r) = \langle \cos k(\theta_i - \theta_j) \rangle$ with exponential fit for correlation length $\xi_k$
+- **Ripley's $K$-function**: spatial clustering analysis for defect point patterns
 - **Spatial block bootstrap**: confidence intervals that respect spatial autocorrelation
 - **Permutation tests**: condition comparison with proper null distribution
-- **Frank elastic energy**: splay and bend decomposition from the director field
-- **Landau-de Gennes parameter fitting**: extract (a, b, c, K) from experimental Q-tensor fields
-- **Activity estimation**: zeta_eff from defect density via mean-field active nematic theory
+- **Frank elastic energy**: splay $(\nabla \cdot \hat{\mathbf{n}})^2$ and bend $|\hat{\mathbf{n}} \times \nabla \times \hat{\mathbf{n}}|^2$ decomposition from the director field
+- **Landau--de Gennes parameter fitting**: extract $(a, b, c, K)$ from experimental $\mathbf{Q}$-tensor fields
+- **Activity estimation**: $\zeta_{\text{eff}}$ from defect density via mean-field active nematic theory
 - **Volterra-compatible output**: fitted parameters exported as JSON for forward simulation with [volterra](https://crates.io/crates/volterra-nematic)
 
 ## Install
@@ -115,10 +115,10 @@ let defects = detect_defects(&cell_thetas, nx, ny, 2, std::f64::consts::FRAC_PI_
 | **mermin** | Facade crate, re-exports everything |
 | **mermin-core** | `CellRecord`, `ImageField`, `BoundaryContour`, `KValue`, error types |
 | **mermin-shape** | Minkowski tensors, Fourier decomposition, shape index, convexity |
-| **mermin-orient** | Multiscale structure tensor, k-atic order parameter fields, nuclear ellipse fitting |
-| **mermin-topo** | Defect detection (via [cartan-geo](https://crates.io/crates/cartan-geo) holonomy), Poincare-Hopf validation, persistent homology |
-| **mermin-stats** | Orientational correlation G_k(r), Ripley's K, spatial block bootstrap, permutation tests |
-| **mermin-theory** | Frank energy, Landau-de Gennes fitting, activity estimation, volterra-compatible JSON output |
+| **mermin-orient** | Multiscale structure tensor, $k$-atic order parameter fields, nuclear ellipse fitting |
+| **mermin-topo** | Defect detection (via [cartan-geo](https://crates.io/crates/cartan-geo) holonomy), Poincar&eacute;--Hopf validation, persistent homology |
+| **mermin-stats** | Orientational correlation $G_k(r)$, Ripley's $K$, spatial block bootstrap, permutation tests |
+| **mermin-theory** | Frank energy, Landau--de Gennes fitting, activity estimation, volterra-compatible JSON output |
 | **mermin-py** | PyO3 bindings exposing all crates to Python |
 
 ## Analysis Pipeline
@@ -143,17 +143,17 @@ TIFF (DAPI + Vimentin)
   +-- Output: per-cell CSV, field arrays, JSON statistics, HTML report
 ```
 
-## Three Independent k-atic Measurements
+## Three Independent $k$-atic Measurements
 
 mermin extracts three independent orientational measurements per cell, each with distinct physical meaning:
 
 | Measurement | Source | What it captures |
 |-------------|--------|-----------------|
-| **Shape k-atic** | Minkowski tensors W_1^{s,0} on cell boundary | How the cell is shaped (elongation, polygonality) |
-| **Internal k-atic** | Structure tensor of vimentin within cell territory | How cytoskeletal fibers are organized inside |
-| **Collective k-atic** | Neighbor correlations on Delaunay graph | How aligned the cell is with its neighbors |
+| **Shape $k$-atic** | Minkowski tensors $W_1^{s,0}$ on cell boundary | How the cell is shaped (elongation, polygonality) |
+| **Internal $k$-atic** | Structure tensor of vimentin within cell territory | How cytoskeletal fibres are organised inside |
+| **Collective $k$-atic** | Neighbour correlations on Delaunay graph | How aligned the cell is with its neighbours |
 
-Agreement or disagreement between these layers is itself diagnostic. A TGF-beta-treated myofibroblast shows concordance across all three. A ROCK-inhibited cell may show a round shape (low shape k=2) but residual internal fiber alignment (higher internal k=2).
+Agreement or disagreement between these layers is itself diagnostic. A TGF-$\beta$-treated myofibroblast shows concordance across all three. A ROCK-inhibited cell may show a round shape (low shape $k{=}2$) but residual internal fibre alignment (higher internal $k{=}2$).
 
 ## Performance
 
