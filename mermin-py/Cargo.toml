@@ -1,0 +1,23 @@
+[package]
+name = "mermin-py"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Python bindings for mermin"
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+mermin-core = { workspace = true }
+mermin-shape = { workspace = true }
+mermin-orient = { workspace = true }
+mermin-topo = { workspace = true }
+mermin-stats = { workspace = true }
+mermin-theory = { workspace = true }
+pyo3 = { workspace = true }
+numpy = { workspace = true }

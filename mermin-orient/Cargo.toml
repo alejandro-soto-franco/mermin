@@ -1,0 +1,14 @@
+[package]
+name = "mermin-orient"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Multiscale structure tensor and k-atic order parameter fields"
+
+[dependencies]
+mermin-core = { workspace = true }
+ndarray = { workspace = true }
+rayon = { workspace = true }
