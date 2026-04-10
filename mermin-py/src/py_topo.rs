@@ -3,6 +3,7 @@
 use mermin_topo::{
     compute_persistence,
     defects::{Defect, detect_defects},
+    delaunay_defects::detect_defects_delaunay,
     poincare_hopf::validate_poincare_hopf,
 };
 use numpy::PyReadonlyArray1;
@@ -88,6 +89,33 @@ pub fn compute_persistence_py(
         dict.set_item("death", pair.death)?;
         dict.set_item("dimension", pair.dimension)?;
         dict.set_item("persistence", pair.persistence())?;
+        results.push(dict.into());
+    }
+    Ok(results)
+}
+
+/// Detect nematic defects on a cell-centroid Delaunay mesh.
+///
+/// `centroids`: list of [x, y] positions in physical units.
+/// `thetas`: list of per-cell nematic orientations in [0, pi).
+/// `simplices`: list of [i0, i1, i2] vertex index triples (from scipy Delaunay).
+/// `max_edge`: maximum allowed edge length in physical units.
+///
+/// Returns list of dicts with "position" ([x, y]) and "charge" (+/-0.5).
+#[pyfunction(name = "detect_defects_delaunay")]
+pub fn detect_defects_delaunay_py(
+    py: Python<'_>,
+    centroids: Vec<[f64; 2]>,
+    thetas: Vec<f64>,
+    simplices: Vec<[usize; 3]>,
+    max_edge: f64,
+) -> PyResult<Vec<PyObject>> {
+    let defects = detect_defects_delaunay(&centroids, &thetas, &simplices, max_edge);
+    let mut results = Vec::new();
+    for d in &defects {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("position", vec![d.x, d.y])?;
+        dict.set_item("charge", d.charge)?;
         results.push(dict.into());
     }
     Ok(results)

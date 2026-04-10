@@ -1,7 +1,8 @@
 // mermin-py/src/py_theory.rs
 
 use mermin_theory::{
-    FrankEnergy, LdGParams, build_volterra_params, estimate_ldg_params, frank_energy, to_json,
+    FrankEnergy, LdGParams, build_volterra_params, estimate_ldg_params, frank_energy,
+    frank_energy_delaunay, to_json,
 };
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
@@ -53,6 +54,31 @@ pub fn estimate_ldg_params_py(
     dict.set_item("b", params.b)?;
     dict.set_item("c", params.c)?;
     dict.set_item("k_elastic", params.k_elastic)?;
+    Ok(dict.into())
+}
+
+/// Compute Frank elastic energy on a cell-centroid Delaunay mesh.
+///
+/// `centroids`: list of [x, y] positions in physical units.
+/// `thetas`: list of per-cell nematic orientations in [0, pi).
+/// `simplices`: list of [i0, i1, i2] vertex index triples.
+/// `max_edge`: maximum allowed edge length.
+///
+/// Returns dict with "splay", "bend", "ratio", "n_triangles".
+#[pyfunction(name = "frank_energy_delaunay")]
+pub fn frank_energy_delaunay_py(
+    py: Python<'_>,
+    centroids: Vec<[f64; 2]>,
+    thetas: Vec<f64>,
+    simplices: Vec<[usize; 3]>,
+    max_edge: f64,
+) -> PyResult<PyObject> {
+    let energy = frank_energy_delaunay(&centroids, &thetas, &simplices, max_edge);
+    let dict = pyo3::types::PyDict::new(py);
+    dict.set_item("splay", energy.splay)?;
+    dict.set_item("bend", energy.bend)?;
+    dict.set_item("ratio", energy.ratio)?;
+    dict.set_item("n_triangles", energy.n_triangles)?;
     Ok(dict.into())
 }
 
