@@ -116,8 +116,16 @@ mod tests {
         let thetas = vec![0.7; 4];
         let simplices = vec![[0, 1, 2], [1, 3, 2]];
         let energy = frank_energy_delaunay(&centroids, &thetas, &simplices, 100.0);
-        assert!(energy.splay < 1e-10, "uniform field: splay should be zero, got {}", energy.splay);
-        assert!(energy.bend < 1e-10, "uniform field: bend should be zero, got {}", energy.bend);
+        assert!(
+            energy.splay < 1e-10,
+            "uniform field: splay should be zero, got {}",
+            energy.splay
+        );
+        assert!(
+            energy.bend < 1e-10,
+            "uniform field: bend should be zero, got {}",
+            energy.bend
+        );
         assert_eq!(energy.n_triangles, 2);
     }
 
@@ -127,6 +135,9 @@ mod tests {
         let thetas = vec![0.0, PI / 4.0, PI / 2.0]; // strong gradient
         let simplices = vec![[0, 1, 2]];
         let energy = frank_energy_delaunay(&centroids, &thetas, &simplices, 100.0);
-        assert!(energy.splay + energy.bend > 0.0, "gradient field should have nonzero energy");
+        assert!(
+            energy.splay + energy.bend > 0.0,
+            "gradient field should have nonzero energy"
+        );
     }
 }
