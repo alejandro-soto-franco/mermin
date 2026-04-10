@@ -53,7 +53,11 @@ mod tests {
     fn perfectly_aligned() {
         let thetas = vec![0.5; 100];
         let order = nematic_order_parameter(&thetas).unwrap();
-        assert!((order.s - 1.0).abs() < 1e-10, "S should be 1.0 for aligned cells, got {}", order.s);
+        assert!(
+            (order.s - 1.0).abs() < 1e-10,
+            "S should be 1.0 for aligned cells, got {}",
+            order.s
+        );
     }
 
     #[test]
@@ -61,7 +65,11 @@ mod tests {
         let n = 1000;
         let thetas: Vec<f64> = (0..n).map(|i| PI * i as f64 / n as f64).collect();
         let order = nematic_order_parameter(&thetas).unwrap();
-        assert!(order.s.abs() < 0.05, "S should be near 0 for uniform distribution, got {}", order.s);
+        assert!(
+            order.s.abs() < 0.05,
+            "S should be near 0 for uniform distribution, got {}",
+            order.s
+        );
     }
 
     #[test]

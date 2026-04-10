@@ -1,7 +1,9 @@
 // mermin-py/src/py_stats.rs
 
 use mermin_core::{Point2, Real};
-use mermin_stats::{nematic_order_parameter, orientational_correlation, permutation_test, ripley_k};
+use mermin_stats::{
+    nematic_order_parameter, orientational_correlation, permutation_test, ripley_k,
+};
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
