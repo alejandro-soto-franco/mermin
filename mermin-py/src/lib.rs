@@ -22,19 +22,24 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(py_orient::fit_nuclear_ellipses, m)?)?;
+    m.add_function(wrap_pyfunction!(py_orient::compute_cell_orientations, m)?)?;
+    m.add_function(wrap_pyfunction!(py_orient::compute_cell_mean_coherence, m)?)?;
 
     // Topology
     m.add_function(wrap_pyfunction!(py_topo::detect_defects_py, m)?)?;
+    m.add_function(wrap_pyfunction!(py_topo::detect_defects_delaunay_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_topo::validate_poincare_hopf_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_topo::compute_persistence_py, m)?)?;
 
     // Statistics
+    m.add_function(wrap_pyfunction!(py_stats::nematic_order_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_stats::orientational_correlation_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_stats::ripley_k_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_stats::permutation_test_py, m)?)?;
 
     // Theory
     m.add_function(wrap_pyfunction!(py_theory::frank_energy_py, m)?)?;
+    m.add_function(wrap_pyfunction!(py_theory::frank_energy_delaunay_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_theory::estimate_ldg_params_py, m)?)?;
     m.add_function(wrap_pyfunction!(py_theory::build_volterra_params_py, m)?)?;
 

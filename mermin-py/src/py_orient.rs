@@ -2,7 +2,8 @@
 
 use mermin_core::ImageField;
 use mermin_orient::{
-    fit_nuclear_ellipse, multiscale_structure_tensor, optimal_scale_map, structure_tensor,
+    cell_mean_coherence, cell_orientations, fit_nuclear_ellipse, multiscale_structure_tensor,
+    optimal_scale_map, structure_tensor,
 };
 use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::prelude::*;
@@ -124,6 +125,81 @@ pub fn fit_nuclear_ellipses(
     }
 
     Ok(results)
+}
+
+/// Compute coherence-weighted nematic orientation per cell.
+///
+/// `cell_mask`: 2D i32 array (h x w), 0 = background.
+/// `theta`: 2D f64 array (h x w), pixel-level orientation.
+/// `coherence`: 2D f64 array (h x w), pixel-level coherence.
+///
+/// Returns list of dicts with "label" and "theta".
+#[pyfunction]
+pub fn compute_cell_orientations(
+    py: Python<'_>,
+    cell_mask: PyReadonlyArray2<'_, i32>,
+    theta: PyReadonlyArray2<'_, f64>,
+    coherence: PyReadonlyArray2<'_, f64>,
+) -> PyResult<Vec<PyObject>> {
+    let mask = cell_mask.as_array();
+    let theta_arr = theta.as_array();
+    let coh_arr = coherence.as_array();
+    let (h, w) = (mask.nrows(), mask.ncols());
+
+    let mask_flat: Vec<i32> = mask.iter().copied().collect();
+    let theta_flat: Vec<f64> = theta_arr.iter().copied().collect();
+    let coh_flat: Vec<f64> = coh_arr.iter().copied().collect();
+
+    // Collect unique labels
+    let mut labels: Vec<i32> = mask_flat.iter().copied().filter(|&l| l > 0).collect();
+    labels.sort();
+    labels.dedup();
+
+    let results = cell_orientations(&mask_flat, &theta_flat, &coh_flat, w, h, &labels);
+
+    let mut out = Vec::with_capacity(results.len());
+    for (label, angle) in results {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("label", label)?;
+        dict.set_item("theta", angle)?;
+        out.push(dict.into());
+    }
+    Ok(out)
+}
+
+/// Compute mean structure-tensor coherence within each cell territory.
+///
+/// `cell_mask`: 2D i32 array (h x w), 0 = background.
+/// `coherence`: 2D f64 array (h x w), pixel-level coherence.
+///
+/// Returns list of dicts with "label" and "coherence".
+#[pyfunction]
+pub fn compute_cell_mean_coherence(
+    py: Python<'_>,
+    cell_mask: PyReadonlyArray2<'_, i32>,
+    coherence: PyReadonlyArray2<'_, f64>,
+) -> PyResult<Vec<PyObject>> {
+    let mask = cell_mask.as_array();
+    let coh_arr = coherence.as_array();
+    let (h, w) = (mask.nrows(), mask.ncols());
+
+    let mask_flat: Vec<i32> = mask.iter().copied().collect();
+    let coh_flat: Vec<f64> = coh_arr.iter().copied().collect();
+
+    let mut labels: Vec<i32> = mask_flat.iter().copied().filter(|&l| l > 0).collect();
+    labels.sort();
+    labels.dedup();
+
+    let results = cell_mean_coherence(&mask_flat, &coh_flat, w, h, &labels);
+
+    let mut out = Vec::with_capacity(results.len());
+    for (label, mean_coh) in results {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("label", label)?;
+        dict.set_item("coherence", mean_coh)?;
+        out.push(dict.into());
+    }
+    Ok(out)
 }
 
 fn to_2d(data: &[f64], h: usize, w: usize) -> Vec<Vec<f64>> {

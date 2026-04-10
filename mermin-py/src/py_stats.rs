@@ -1,7 +1,7 @@
 // mermin-py/src/py_stats.rs
 
 use mermin_core::{Point2, Real};
-use mermin_stats::{orientational_correlation, permutation_test, ripley_k};
+use mermin_stats::{nematic_order_parameter, orientational_correlation, permutation_test, ripley_k};
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
@@ -68,6 +68,25 @@ pub fn ripley_k_py(
     dict.set_item("r_values", PyArray1::from_slice(py, &result.r_values))?;
     dict.set_item("k_values", PyArray1::from_slice(py, &result.k_values))?;
     dict.set_item("l_values", PyArray1::from_slice(py, &result.l_values))?;
+    Ok(dict.into())
+}
+
+/// Compute the global nematic order parameter S = <cos 2(theta - theta_mean)>.
+///
+/// `cell_thetas`: 1D array of per-cell nematic orientations in [0, pi).
+///
+/// Returns dict with "s" (order parameter in [0, 1]) and "mean_angle".
+#[pyfunction(name = "nematic_order")]
+pub fn nematic_order_py(
+    py: Python<'_>,
+    cell_thetas: PyReadonlyArray1<'_, f64>,
+) -> PyResult<PyObject> {
+    let thetas = cell_thetas.as_slice()?;
+    let result = nematic_order_parameter(thetas)
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("need at least 2 cells"))?;
+    let dict = pyo3::types::PyDict::new(py);
+    dict.set_item("s", result.s)?;
+    dict.set_item("mean_angle", result.mean_angle)?;
     Ok(dict.into())
 }
 

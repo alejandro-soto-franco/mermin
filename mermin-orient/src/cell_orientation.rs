@@ -91,6 +91,100 @@ pub fn fit_nuclear_ellipse(pixels: &[(usize, usize)]) -> Option<NuclearEllipse> 
     })
 }
 
+/// Coherence-weighted nematic circular mean orientation per cell.
+///
+/// For each label in `labels`, computes:
+///   theta_cell = (1/2) atan2(sum C_i sin 2*theta_i, sum C_i cos 2*theta_i) mod pi
+///
+/// where the sum runs over all pixels within that cell's territory in `cell_mask`.
+///
+/// `cell_mask`: row-major i32 array (h x w), 0 = background.
+/// `theta`: row-major f64 array (h x w), pixel-level orientation in radians.
+/// `coherence`: row-major f64 array (h x w), pixel-level coherence in [0, 1].
+/// `labels`: sorted list of cell labels to process.
+///
+/// Returns a Vec of (label, theta_cell) pairs.
+pub fn cell_orientations(
+    cell_mask: &[i32],
+    theta: &[Real],
+    coherence: &[Real],
+    width: usize,
+    height: usize,
+    labels: &[i32],
+) -> Vec<(i32, Real)> {
+    use std::collections::HashMap;
+
+    let mut sin_acc: HashMap<i32, Real> = labels.iter().map(|&l| (l, 0.0)).collect();
+    let mut cos_acc: HashMap<i32, Real> = labels.iter().map(|&l| (l, 0.0)).collect();
+
+    let npix = width * height;
+    for i in 0..npix {
+        let lab = cell_mask[i];
+        if lab <= 0 {
+            continue;
+        }
+        let c_val = coherence[i];
+        let t_val = theta[i];
+        if let Some(s) = sin_acc.get_mut(&lab) {
+            *s += c_val * (2.0 * t_val).sin();
+        }
+        if let Some(c) = cos_acc.get_mut(&lab) {
+            *c += c_val * (2.0 * t_val).cos();
+        }
+    }
+
+    labels
+        .iter()
+        .map(|&lab| {
+            let s = sin_acc[&lab];
+            let c = cos_acc[&lab];
+            let mut angle = 0.5 * s.atan2(c);
+            angle = angle.rem_euclid(std::f64::consts::PI);
+            (lab, angle)
+        })
+        .collect()
+}
+
+/// Mean structure-tensor coherence within each cell territory.
+///
+/// Returns Vec of (label, mean_coherence) pairs.
+pub fn cell_mean_coherence(
+    cell_mask: &[i32],
+    coherence: &[Real],
+    width: usize,
+    height: usize,
+    labels: &[i32],
+) -> Vec<(i32, Real)> {
+    use std::collections::HashMap;
+
+    let mut sum: HashMap<i32, Real> = labels.iter().map(|&l| (l, 0.0)).collect();
+    let mut count: HashMap<i32, u64> = labels.iter().map(|&l| (l, 0)).collect();
+
+    let npix = width * height;
+    for i in 0..npix {
+        let lab = cell_mask[i];
+        if lab <= 0 {
+            continue;
+        }
+        if let Some(s) = sum.get_mut(&lab) {
+            *s += coherence[i];
+        }
+        if let Some(n) = count.get_mut(&lab) {
+            *n += 1;
+        }
+    }
+
+    labels
+        .iter()
+        .map(|&lab| {
+            let s = sum[&lab];
+            let n = count[&lab];
+            let mean = if n > 0 { s / n as Real } else { 0.0 };
+            (lab, mean)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

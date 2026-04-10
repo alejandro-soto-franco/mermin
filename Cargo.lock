@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "mermin"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mermin-core",
  "mermin-orient",
@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nalgebra",
  "serde",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-orient"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mermin-core",
  "ndarray",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-py"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mermin-core",
  "mermin-orient",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-shape"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mermin-core",
  "nalgebra",
@@ -239,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-stats"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mermin-core",
  "rand 0.8.5",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-theory"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cartan-core",
  "cartan-optim",
@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "mermin-topo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cartan-geo",
  "cartan-manifolds",
