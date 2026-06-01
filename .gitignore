@@ -40,3 +40,4 @@ Thumbs.db
 # Docs and analysis
 docs/
 numerical-tests/
+/target

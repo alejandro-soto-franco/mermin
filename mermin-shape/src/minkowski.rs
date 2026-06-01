@@ -150,7 +150,7 @@ mod tests {
         ])
         .unwrap();
         let tensor = minkowski_w1_tensor(&contour);
-        let (elong, angle) = elongation_from_w1_tensor(&tensor);
+        let (elong, _angle) = elongation_from_w1_tensor(&tensor);
         // Elongated along x, so major normal is along y
         // The elongation orientation should be ~pi/2 (normal to long axis)
         // Actually: W1 tensor eigenvector for *largest* eigenvalue is the direction
