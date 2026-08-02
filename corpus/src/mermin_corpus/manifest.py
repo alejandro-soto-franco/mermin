@@ -23,6 +23,16 @@ STATUSES = {"pending", "fetched", "probed", "golden"}
 
 @dataclass
 class Entry:
+    """An entry in the corpus manifest.
+
+    The nested dict fields (source, expected, roles, policy, provenance) are
+    snapshots of the tomlkit tables taken at load time. Mutating them directly
+    does not persist to the manifest; changes vanish on save. Use
+    Manifest.update_provenance and Manifest.set_expected to modify an entry
+    persistently. Scalar fields have no setters and should not be reassigned
+    after loading.
+    """
+
     id: str
     rung: int
     partition: str

@@ -111,3 +111,12 @@ def test_validate_requires_a_source_locator(manifest_file):
     e.source = {"kind": "http"}
     with pytest.raises(ManifestError, match="url"):
         validate_entry(e)
+
+
+def test_direct_entry_mutation_does_not_persist(manifest_file):
+    m = load(manifest_file)
+    e = m.get("phantom-uniform")
+    e.provenance["status"] = "probed"
+    m.save()
+    reloaded = load(manifest_file)
+    assert reloaded.get("phantom-uniform").provenance["status"] == "pending"
