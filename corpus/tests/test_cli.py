@@ -71,3 +71,11 @@ def test_fetch_requires_a_selector(corpus):
 def test_unknown_id_exits_nonzero(corpus, capsys):
     assert main(["fetch", "--id", "nope"]) == 1
     assert "unknown entry" in capsys.readouterr().err
+
+
+def test_probe_before_fetch_reports_cleanly(corpus, capsys):
+    assert main(["probe", "--id", "phantom-uniform"]) == 1
+    captured = capsys.readouterr()
+    assert "FAILED" in captured.err
+    assert "phantom-uniform" in captured.err
+    assert "Traceback" not in captured.err

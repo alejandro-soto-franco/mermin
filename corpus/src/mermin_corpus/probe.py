@@ -13,6 +13,7 @@ from typing import Any
 
 from bioio import BioImage
 
+from .errors import ProbeError
 from .manifest import Manifest
 from .root import ensure, entry_dir
 
@@ -151,9 +152,13 @@ def probe_entry(manifest: Manifest, entry_id: str) -> dict[str, Any]:
 
     entry = manifest.get(entry_id)
     target = raw_path(entry)
+    if not target.exists():
+        raise ProbeError(
+            f"{entry_id}: nothing fetched at {target}. Run fetch for this entry first."
+        )
     candidates = sorted(p for p in ([target] if target.is_file() else target.iterdir()))
     if not candidates:
-        raise FileNotFoundError(f"{entry_id}: nothing fetched at {target}")
+        raise ProbeError(f"{entry_id}: nothing fetched at {target}")
 
     info = probe_file(candidates[0])
     info["n_artefacts"] = len(candidates)

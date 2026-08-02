@@ -1,7 +1,7 @@
 # mermin ingest corpus
 
-Fetch and probe tooling for the multi-channel microscopy corpus that mermin's
-ingest layer is tested against.
+Fetch and probe tooling for the multi-channel microscopy corpus against which
+mermin's ingest layer is tested.
 
 ## Licence position
 

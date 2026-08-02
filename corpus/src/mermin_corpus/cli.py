@@ -49,8 +49,14 @@ def main(argv: list[str] | None = None) -> int:
         manifest = load()
         if args.command == "status":
             return _status(manifest)
+        selected = _select(manifest, args)
+    except CorpusError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
-        for entry_id in _select(manifest, args):
+    failed: list[str] = []
+    for entry_id in selected:
+        try:
             manifest = load()
             if args.command == "fetch":
                 path = fetch_entry(manifest, entry_id, force=args.force)
@@ -58,10 +64,14 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 info = probe_entry(manifest, entry_id)
                 print(f"probed  {entry_id}  {info['axes']} {info['shape']} {info['dtype']}")
-        return 0
-    except CorpusError as exc:
-        print(str(exc), file=sys.stderr)
+        except CorpusError as exc:
+            failed.append(entry_id)
+            print(f"FAILED  {entry_id}: {exc}", file=sys.stderr)
+
+    if failed:
+        print(f"{len(failed)} of {len(selected)} entries failed: {', '.join(failed)}", file=sys.stderr)
         return 1
+    return 0
 
 
 if __name__ == "__main__":

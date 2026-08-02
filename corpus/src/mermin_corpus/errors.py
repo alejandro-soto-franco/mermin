@@ -15,3 +15,7 @@ class ManifestError(CorpusError):
 
 class FetchError(CorpusError):
     """A fetch failed, or produced bytes that disagree with a recorded hash."""
+
+
+class ProbeError(CorpusError):
+    """An artefact could not be probed, usually because it was never fetched."""
