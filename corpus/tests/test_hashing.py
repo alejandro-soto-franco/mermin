@@ -38,3 +38,16 @@ def test_size_of_sums_a_tree(tmp_path):
     (a / "sub" / "x.bin").write_bytes(b"1234")
     (a / "y.bin").write_bytes(b"12")
     assert size_of(a) == 6
+
+
+def test_sha256_tree_does_not_collide_across_file_boundaries(tmp_path):
+    a = tmp_path / "a"
+    a.mkdir()
+    (a / "a").write_bytes(b"bc")
+    (a / "d").write_bytes(b"e")
+
+    c = tmp_path / "c"
+    c.mkdir()
+    (c / "a").write_bytes(b"bcd\x00e")
+
+    assert sha256_tree(a) != sha256_tree(c)

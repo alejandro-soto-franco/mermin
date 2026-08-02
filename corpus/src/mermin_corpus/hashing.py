@@ -21,13 +21,18 @@ def sha256_file(path: Path) -> str:
 
 
 def sha256_tree(path: Path) -> str:
+    """Digest of a directory tree, folding in each file's relative path.
+
+    The path is length-prefixed and the content contributes a fixed-width
+    per-file digest, so no arrangement of names and bytes can produce the
+    same stream as a different tree.
+    """
     h = hashlib.sha256()
     for f in sorted(p for p in path.rglob("*") if p.is_file()):
-        h.update(str(f.relative_to(path)).encode())
-        h.update(b"\0")
-        with f.open("rb") as fh:
-            for block in iter(lambda: fh.read(CHUNK), b""):
-                h.update(block)
+        rel = str(f.relative_to(path)).encode()
+        h.update(len(rel).to_bytes(8, "big"))
+        h.update(rel)
+        h.update(bytes.fromhex(sha256_file(f)))
     return h.hexdigest()
 
 
