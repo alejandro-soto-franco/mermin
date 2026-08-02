@@ -141,11 +141,11 @@ def test_unsupported_kind_does_not_destroy_existing_raw(corpus, tmp_path, monkey
     before = sorted(p.name for p in raw.iterdir())
     assert before
 
-    # Re-point the same entry at a kind that has no fetcher yet.
-    m2 = load(corpus)
-    m2._table("phantom-uniform")["source"]["kind"] = "ome-zarr"
-    m2._table("phantom-uniform")["source"]["url"] = "https://example.test/x.zarr"
-    m2.save()
+    # Every valid kind now has a fetcher, so the guard is reached by removing
+    # one from the registry rather than by naming an unimplemented kind.
+    from mermin_corpus import fetch as fetch_mod
+
+    monkeypatch.delitem(fetch_mod._FETCHERS, "generated")
 
     with pytest.raises(FetchError, match="not implemented"):
         fetch_entry(load(corpus), "phantom-uniform", force=True)

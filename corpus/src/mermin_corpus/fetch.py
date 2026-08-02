@@ -7,6 +7,7 @@ with what regenerates or re-downloads is an error rather than an update.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import shutil
 import tempfile
 import zipfile
@@ -124,10 +125,78 @@ def _fetch_zip_index(entry: Entry, dest: Path) -> Path:
     return files[0]
 
 
+_ZARR_ROOT_KEYS = (".zgroup", ".zattrs", ".zmetadata")
+
+
+def _zarr_get(url: str) -> bytes:
+    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return response.content
+
+
+def _chunk_keys(level: str, zarray: dict) -> list[str]:
+    """Every chunk key of one array, derived from its shape and chunk shape."""
+    import itertools
+    import math
+
+    grid = [math.ceil(s / c) for s, c in zip(zarray["shape"], zarray["chunks"])]
+    keys = [f"{level}/.zarray"]
+    for idx in itertools.product(*(range(g) for g in grid)):
+        keys.append(f"{level}/" + ".".join(str(i) for i in idx))
+    return keys
+
+
+def _zarr_listing(url: str, level: str) -> list[str]:
+    """Keys of one pyramid level.
+
+    Object storage offers no directory listing, so chunk keys are derived
+    arithmetically. Consolidated metadata is used when the store carries it,
+    and the level's own .zarray is fetched directly when it does not.
+    """
+    try:
+        meta = json.loads(_zarr_get(f"{url}/.zmetadata"))["metadata"]
+    except Exception:
+        meta = None
+
+    if meta is not None and f"{level}/.zarray" in meta:
+        return _chunk_keys(level, meta[f"{level}/.zarray"])
+
+    return _chunk_keys(level, json.loads(_zarr_get(f"{url}/{level}/.zarray")))
+
+
+def _fetch_ome_zarr(entry: Entry, dest: Path) -> Path:
+    url = entry.source["url"].rstrip("/")
+    level = str(entry.source.get("level", 0))
+    store = dest / Path(urlparse(url).path).name
+    ensure(store)
+
+    for key in _ZARR_ROOT_KEYS:
+        try:
+            (store / key).write_bytes(_zarr_get(f"{url}/{key}"))
+        except Exception:
+            continue
+
+    try:
+        wanted = _zarr_listing(url, level)
+    except httpx.HTTPError as exc:
+        raise FetchError(f"{entry.id}: cannot reach {url}: {exc}") from exc
+    except Exception as exc:
+        raise FetchError(f"{entry.id}: pyramid level {level} is absent from {url}: {exc}") from exc
+
+    for key in wanted:
+        target = store / key
+        ensure(target.parent)
+        target.write_bytes(_zarr_get(f"{url}/{key}"))
+
+    return store
+
+
 _FETCHERS = {
     "generated": _fetch_generated,
     "http": _fetch_http,
     "zip-index": _fetch_zip_index,
+    "ome-zarr": _fetch_ome_zarr,
 }
 
 
