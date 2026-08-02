@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import datetime as _dt
 import shutil
+import tempfile
+import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
+import httpx
 import tifffile
 
 from .errors import FetchError
@@ -69,8 +73,60 @@ def _fetch_local(entry: Entry) -> Path:
     return src
 
 
+def _download(url: str, dest_file: Path) -> None:
+    ensure(dest_file.parent)
+    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            with dest_file.open("wb") as fh:
+                for chunk in response.iter_bytes(chunk_size=1 << 16):
+                    fh.write(chunk)
+
+
+def _url_filename(url: str) -> str:
+    name = Path(unquote(urlparse(url).path)).name
+    if not name:
+        raise FetchError(f"cannot derive a filename from {url}")
+    return name
+
+
+def _fetch_http(entry: Entry, dest: Path) -> Path:
+    out = dest / _url_filename(entry.source["url"])
+    _download(entry.source["url"], out)
+    return out
+
+
+def _fetch_zip_index(entry: Entry, dest: Path) -> Path:
+    members = list(entry.source.get("members", []))
+    if not members:
+        raise FetchError(f"{entry.id}: zip-index requires a non-empty members list")
+
+    ensure(dest)
+    resolved_dest = dest.resolve()
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / "archive.zip"
+        _download(entry.source["url"], archive)
+        with zipfile.ZipFile(archive) as zf:
+            available = set(zf.namelist())
+            missing = [m for m in members if m not in available]
+            if missing:
+                raise FetchError(f"{entry.id}: members absent from the archive: {missing}")
+            for member in members:
+                # Check if the member path escapes the destination
+                candidate = (resolved_dest / member).resolve()
+                if not str(candidate).startswith(str(resolved_dest)):
+                    raise FetchError(f"{entry.id}: member {member!r} escapes the destination")
+                # Extract using just the filename
+                target = resolved_dest / Path(member).name
+                with zf.open(member) as src, target.open("wb") as fh:
+                    shutil.copyfileobj(src, fh)
+    return next(iter(sorted(dest.iterdir())))
+
+
 _FETCHERS = {
     "generated": _fetch_generated,
+    "http": _fetch_http,
+    "zip-index": _fetch_zip_index,
 }
 
 
