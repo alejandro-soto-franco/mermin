@@ -26,11 +26,26 @@ class PhantomResult:
     axes: str
     pixel_size_um: float
     truth: dict
+    theta: np.ndarray
 
 
 def _grid() -> tuple[np.ndarray, np.ndarray]:
     c = np.arange(SIZE) - SIZE / 2.0
     return np.meshgrid(c, c, indexing="xy")
+
+
+def _nuclei(rng: np.random.Generator) -> np.ndarray:
+    """Scattered elliptical blobs standing in for a nuclear stain."""
+    x, y = _grid()
+    field = np.zeros_like(x)
+    count = 60
+    cx = rng.uniform(-SIZE / 2.0, SIZE / 2.0, count)
+    cy = rng.uniform(-SIZE / 2.0, SIZE / 2.0, count)
+    sx = rng.uniform(3.0, 6.0, count)
+    sy = rng.uniform(3.0, 6.0, count)
+    for i in range(count):
+        field += np.exp(-(((x - cx[i]) / sx[i]) ** 2 + ((y - cy[i]) / sy[i]) ** 2))
+    return np.clip(field + rng.normal(0.0, 0.01, field.shape), 0.0, 1.0)
 
 
 def _render(theta: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -40,9 +55,7 @@ def _render(theta: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     fibre = 0.5 * (1.0 + np.sin(phase))
     fibre = np.clip(fibre + rng.normal(0.0, 0.02, fibre.shape), 0.0, 1.0)
 
-    r = np.hypot(x, y)
-    nuclei = np.exp(-((r % 40.0) ** 2) / 18.0)
-    nuclei = np.clip(nuclei + rng.normal(0.0, 0.01, nuclei.shape), 0.0, 1.0)
+    nuclei = _nuclei(rng)
 
     stack = np.stack([nuclei, fibre])
     return (stack * 65535.0).astype(np.uint16)
@@ -55,6 +68,7 @@ def uniform_director(seed: int) -> PhantomResult:
     return PhantomResult(
         _render(theta, rng), "CYX", PIXEL_SIZE_UM,
         {"field": "uniform", "theta": angle, "n_defects": 0, "charges": [], "total_charge": 0},
+        theta,
     )
 
 
@@ -75,6 +89,7 @@ def defect_pair(seed: int) -> PhantomResult:
             "total_charge": 0.0,
             "positions_px": [[SIZE / 2 + sep, SIZE / 2], [SIZE / 2 - sep, SIZE / 2]],
         },
+        theta,
     )
 
 
@@ -91,6 +106,7 @@ def radial_defect(seed: int) -> PhantomResult:
             "total_charge": 1.0,
             "positions_px": [[SIZE / 2, SIZE / 2]],
         },
+        theta,
     )
 
 
@@ -105,6 +121,7 @@ def hexatic_lattice(seed: int) -> PhantomResult:
     return PhantomResult(
         _render(theta, rng), "CYX", PIXEL_SIZE_UM,
         {"field": "hexatic", "k": 6, "n_defects": 0, "charges": [], "total_charge": 0.0},
+        theta,
     )
 
 

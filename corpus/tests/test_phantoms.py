@@ -48,3 +48,36 @@ def test_hexatic_lattice_truth_records_k_six():
 def test_unknown_generator_raises():
     with pytest.raises(KeyError):
         generate("nope", seed=1)
+
+
+def _loop_winding(theta: np.ndarray, col: int, row: int, r: int) -> float:
+    """Nematic winding around a square pixel loop, in units of 2 pi.
+
+    Differences are wrapped into (-pi/2, pi/2] because a director is defined
+    modulo pi, so a vector wrap into (-pi, pi] would give the wrong charge.
+    """
+    pts = []
+    pts += [(row - r, col + i) for i in range(-r, r)]
+    pts += [(row + i, col + r) for i in range(-r, r)]
+    pts += [(row + r, col + i) for i in range(r, -r, -1)]
+    pts += [(row + i, col - r) for i in range(r, -r, -1)]
+    vals = np.array([theta[p, q] for p, q in pts])
+    d = np.diff(np.concatenate([vals, vals[:1]]))
+    d = (d + np.pi / 2.0) % np.pi - np.pi / 2.0
+    return float(d.sum() / (2.0 * np.pi))
+
+
+def test_measured_winding_matches_the_recorded_charges():
+    half = 128  # SIZE // 2
+    sep = 64    # SIZE // 4
+
+    r = generate("defect_pair", seed=3)
+    assert _loop_winding(r.theta, half + sep, half, 20) == pytest.approx(0.5, abs=0.05)
+    assert _loop_winding(r.theta, half - sep, half, 20) == pytest.approx(-0.5, abs=0.05)
+
+    r = generate("radial_defect", seed=3)
+    assert _loop_winding(r.theta, half, half, 30) == pytest.approx(1.0, abs=0.05)
+
+    for name in ("uniform_director", "hexatic_lattice"):
+        r = generate(name, seed=3)
+        assert _loop_winding(r.theta, half + 40, half - 30, 15) == pytest.approx(0.0, abs=0.05)
