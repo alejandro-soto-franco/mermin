@@ -23,3 +23,4 @@ dependencies = [
 python-source = "../python"
 module-name = "mermin._native"
 features = ["pyo3/extension-module"]
+exclude = ["corpus/**", "docs/**", "numerical-tests/**", "mermin-tests/**"]

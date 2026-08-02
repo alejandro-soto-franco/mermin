@@ -13,6 +13,9 @@ dependencies = [
     "bioio-tifffile>=1.0",
 ]
 
+[project.scripts]
+mermin-corpus = "mermin_corpus.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8.0"]
 
