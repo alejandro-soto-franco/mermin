@@ -17,8 +17,48 @@ from .manifest import Manifest
 from .root import ensure, entry_dir
 
 _EMISSION = re.compile(r'id="wavelength"[^>]*value="([\d.]+)"')
+_CALIBRATION_X = re.compile(r'id="spatial-calibration-x"[^>]*value="([\d.]+)"')
+_CALIBRATION_STATE = re.compile(r'id="spatial-calibration-state"[^>]*value="([^"]+)"')
+_CALIBRATION_UNITS = re.compile(r'id="spatial-calibration-units"[^>]*value="([^"]+)"')
 _MICRON_UNITS = {"micron", "microns", "um", "µm"}
 _TIFF_SUFFIXES = {".tif", ".tiff"}
+
+
+def _imagej_labels(path: Path) -> list[str]:
+    """ImageJ `Labels` as a list, however tifffile round-tripped them.
+
+    A single label comes back as a bare string rather than a list, and
+    iterating that directly walks it character by character.
+    """
+    try:
+        import tifffile
+
+        with tifffile.TiffFile(path) as tif:
+            labels = (tif.imagej_metadata or {}).get("Labels") or []
+    except Exception:
+        return []
+    if isinstance(labels, str):
+        labels = [labels]
+    return [str(label) for label in labels]
+
+
+def _metamorph_pixel_size_um(path: Path) -> float | None:
+    """Pixel size from the MetaMorph spatial calibration, when it is enabled.
+
+    Every plane of a MetaMorph stack carries the same calibration, so the
+    first label that states one is enough.
+    """
+    for label in _imagej_labels(path):
+        state = _CALIBRATION_STATE.search(label)
+        if not state or state.group(1).lower() != "on":
+            continue
+        units = _CALIBRATION_UNITS.search(label)
+        if not units or not units.group(1).lower().startswith("micron"):
+            continue
+        value = _CALIBRATION_X.search(label)
+        if value and float(value.group(1)) > 0:
+            return float(value.group(1))
+    return None
 
 
 def _pixel_size_um_from_tiff(path: Path) -> float | None:
@@ -33,28 +73,33 @@ def _pixel_size_um_from_tiff(path: Path) -> float | None:
     phantom generator does) raises inside bioio and is swallowed into None
     even when a real resolution tag is present. Reading the tags directly and
     only trusting an explicit micron-family unit string avoids both.
+
+    When no TIFF-tag calibration is present, this falls back to the MetaMorph
+    spatial calibration embedded in the ImageJ Labels (see
+    `_metamorph_pixel_size_um`), which is where the real Montano batch keeps
+    its pixel size; the standard tags are unset there.
     """
     try:
         import tifffile
     except ImportError:
-        return None
+        return _metamorph_pixel_size_um(path)
     try:
         with tifffile.TiffFile(path) as tif:
             if not tif.is_imagej:
-                return None
+                return _metamorph_pixel_size_um(path)
             meta = tif.imagej_metadata or {}
             unit = str(meta.get("unit") or "").lower()
             if unit not in _MICRON_UNITS:
-                return None
+                return _metamorph_pixel_size_um(path)
             page = tif.pages[0]
             if "XResolution" not in page.tags:
-                return None
+                return _metamorph_pixel_size_um(path)
             num, den = page.tags["XResolution"].value
             if not num:
-                return None
+                return _metamorph_pixel_size_um(path)
             return float(den) / float(num)
     except Exception:
-        return None
+        return _metamorph_pixel_size_um(path)
 
 
 def _pixel_size_um(path: Path, image: BioImage) -> float | None:
@@ -67,23 +112,19 @@ def _pixel_size_um(path: Path, image: BioImage) -> float | None:
     return None
 
 
-def _emission_nm(path: Path) -> list[float]:
-    """MetaMorph emission wavelengths, one per plane, from the ImageJ Labels.
+def _emission_nm(path: Path) -> list[float | None]:
+    """Per-plane emission wavelength from the MetaMorph XML in ImageJ Labels.
 
-    The Montano batch stores its channel identity here and nowhere else, and its
+    One entry per label, `None` where a label carried no parseable wavelength,
+    so a partial parse cannot be mistaken for a file with fewer planes. The
+    Montano batch stores its channel identity here and nowhere else, and its
     plane order is not constant across the batch.
     """
-    try:
-        import tifffile
-    except ImportError:
-        return []
-    try:
-        with tifffile.TiffFile(path) as tif:
-            labels = (tif.imagej_metadata or {}).get("Labels") or []
-            return [float(m.group(1)) for label in labels
-                    if (m := _EMISSION.search(str(label)))]
-    except Exception:
-        return []
+    out: list[float | None] = []
+    for label in _imagej_labels(path):
+        match = _EMISSION.search(label)
+        out.append(float(match.group(1)) if match else None)
+    return out
 
 
 def probe_file(path: Path) -> dict[str, Any]:
