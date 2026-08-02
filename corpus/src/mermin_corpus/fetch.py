@@ -112,15 +112,16 @@ def _fetch_zip_index(entry: Entry, dest: Path) -> Path:
             if missing:
                 raise FetchError(f"{entry.id}: members absent from the archive: {missing}")
             for member in members:
-                # Check if the member path escapes the destination
                 candidate = (resolved_dest / member).resolve()
-                if not str(candidate).startswith(str(resolved_dest)):
+                if not candidate.is_relative_to(resolved_dest):
                     raise FetchError(f"{entry.id}: member {member!r} escapes the destination")
-                # Extract using just the filename
-                target = resolved_dest / Path(member).name
-                with zf.open(member) as src, target.open("wb") as fh:
+                ensure(candidate.parent)
+                with zf.open(member) as src, candidate.open("wb") as fh:
                     shutil.copyfileobj(src, fh)
-    return next(iter(sorted(dest.iterdir())))
+    files = sorted(p for p in dest.rglob("*") if p.is_file())
+    if not files:
+        raise FetchError(f"{entry.id}: the archive yielded no files")
+    return files[0]
 
 
 _FETCHERS = {

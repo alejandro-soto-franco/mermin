@@ -134,3 +134,20 @@ def test_zip_index_rejects_a_traversal_member(tmp_path, monkeypatch, fake_http):
 
     with pytest.raises(FetchError, match="escapes"):
         fetch_entry(load(p), "evil")
+
+
+def test_zip_index_preserves_subpaths_so_basenames_cannot_collide(tmp_path, monkeypatch, fake_http):
+    monkeypatch.setenv("MERMIN_CORPUS_ROOT", str(tmp_path))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("plateA/w1.tif", b"PLATE_A_DATA")
+        z.writestr("plateB/w1.tif", b"PLATE_B_DATA")
+    fake_http["https://example.test/collide.zip"] = buf.getvalue()
+
+    members = 'members = ["plateA/w1.tif", "plateB/w1.tif"]'
+    p = _manifest(tmp_path, "collide", "zip-index", "https://example.test/collide.zip", members)
+    fetch_entry(load(p), "collide")
+
+    raw = tmp_path / "commercial-safe" / "collide" / "raw"
+    assert (raw / "plateA" / "w1.tif").read_bytes() == b"PLATE_A_DATA"
+    assert (raw / "plateB" / "w1.tif").read_bytes() == b"PLATE_B_DATA"
