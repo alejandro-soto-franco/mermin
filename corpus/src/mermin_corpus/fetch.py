@@ -128,26 +128,36 @@ def _fetch_zip_index(entry: Entry, dest: Path) -> Path:
 _ZARR_ROOT_KEYS = (".zgroup", ".zattrs", ".zmetadata")
 
 
-def _zarr_get(url: str) -> bytes:
-    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+def _zarr_get(url: str, client: httpx.Client | None = None) -> bytes:
+    if client is not None:
         response = client.get(url)
+        response.raise_for_status()
+        return response.content
+    with httpx.Client(follow_redirects=True, timeout=120.0) as owned:
+        response = owned.get(url)
         response.raise_for_status()
         return response.content
 
 
 def _chunk_keys(level: str, zarray: dict) -> list[str]:
-    """Every chunk key of one array, derived from its shape and chunk shape."""
+    """Every chunk key of one array, derived from its shape and chunk shape.
+
+    Zarr v2 defaults to "." between chunk indices, but a store may set
+    `dimension_separator` to "/", which real IDR stores do. Deriving keys with
+    the wrong separator makes every chunk request miss.
+    """
     import itertools
     import math
 
+    separator = zarray.get("dimension_separator", ".")
     grid = [math.ceil(s / c) for s, c in zip(zarray["shape"], zarray["chunks"])]
     keys = [f"{level}/.zarray"]
     for idx in itertools.product(*(range(g) for g in grid)):
-        keys.append(f"{level}/" + ".".join(str(i) for i in idx))
+        keys.append(f"{level}/" + separator.join(str(i) for i in idx))
     return keys
 
 
-def _zarr_listing(url: str, level: str) -> list[str]:
+def _zarr_listing(url: str, level: str, client: httpx.Client | None = None) -> list[str]:
     """Keys of one pyramid level.
 
     Object storage offers no directory listing, so chunk keys are derived
@@ -155,14 +165,14 @@ def _zarr_listing(url: str, level: str) -> list[str]:
     and the level's own .zarray is fetched directly when it does not.
     """
     try:
-        meta = json.loads(_zarr_get(f"{url}/.zmetadata"))["metadata"]
+        meta = json.loads(_zarr_get(f"{url}/.zmetadata", client))["metadata"]
     except Exception:
         meta = None
 
     if meta is not None and f"{level}/.zarray" in meta:
         return _chunk_keys(level, meta[f"{level}/.zarray"])
 
-    return _chunk_keys(level, json.loads(_zarr_get(f"{url}/{level}/.zarray")))
+    return _chunk_keys(level, json.loads(_zarr_get(f"{url}/{level}/.zarray", client)))
 
 
 def _fetch_ome_zarr(entry: Entry, dest: Path) -> Path:
@@ -171,23 +181,29 @@ def _fetch_ome_zarr(entry: Entry, dest: Path) -> Path:
     store = dest / Path(urlparse(url).path).name
     ensure(store)
 
-    for key in _ZARR_ROOT_KEYS:
+    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+        for key in _ZARR_ROOT_KEYS:
+            try:
+                (store / key).write_bytes(_zarr_get(f"{url}/{key}", client))
+            except Exception:
+                continue
+
         try:
-            (store / key).write_bytes(_zarr_get(f"{url}/{key}"))
-        except Exception:
-            continue
+            wanted = _zarr_listing(url, level, client)
+        except httpx.HTTPStatusError as exc:
+            raise FetchError(f"{entry.id}: pyramid level {level} is absent from {url}: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise FetchError(f"{entry.id}: cannot reach {url}: {exc}") from exc
+        except Exception as exc:
+            raise FetchError(f"{entry.id}: cannot read store metadata at {url}: {exc}") from exc
 
-    try:
-        wanted = _zarr_listing(url, level)
-    except httpx.HTTPError as exc:
-        raise FetchError(f"{entry.id}: cannot reach {url}: {exc}") from exc
-    except Exception as exc:
-        raise FetchError(f"{entry.id}: pyramid level {level} is absent from {url}: {exc}") from exc
-
-    for key in wanted:
-        target = store / key
-        ensure(target.parent)
-        target.write_bytes(_zarr_get(f"{url}/{key}"))
+        try:
+            for key in wanted:
+                target = store / key
+                ensure(target.parent)
+                target.write_bytes(_zarr_get(f"{url}/{key}", client))
+        except httpx.HTTPError as exc:
+            raise FetchError(f"{entry.id}: failed fetching {key!r} from {url}: {exc}") from exc
 
     return store
 

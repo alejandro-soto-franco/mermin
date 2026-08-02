@@ -73,7 +73,7 @@ def fake_store(monkeypatch, tmp_path):
 
         return R()
 
-    monkeypatch.setattr("mermin_corpus.fetch._zarr_get", lambda url: files[url])
+    monkeypatch.setattr("mermin_corpus.fetch._zarr_get", lambda url, client=None: files[url])
     return base
 
 
@@ -101,7 +101,7 @@ def test_zarr_listing_prefers_consolidated_metadata(monkeypatch):
     }}).encode()
     calls = []
 
-    def fake_get(url):
+    def fake_get(url, client=None):
         calls.append(url)
         if url.endswith("/.zmetadata"):
             return consolidated
@@ -116,7 +116,7 @@ def test_zarr_listing_prefers_consolidated_metadata(monkeypatch):
 def test_zarr_listing_falls_back_to_the_level_zarray(monkeypatch):
     from mermin_corpus import fetch
 
-    def fake_get(url):
+    def fake_get(url, client=None):
         if url.endswith("/.zmetadata"):
             raise RuntimeError("404")
         return json.dumps({"shape": [1, 8, 8], "chunks": [1, 4, 8]}).encode()
@@ -125,3 +125,20 @@ def test_zarr_listing_falls_back_to_the_level_zarray(monkeypatch):
     assert fetch._zarr_listing("https://example.test/s.zarr", "2") == [
         "2/.zarray", "2/0.0.0", "2/0.1.0",
     ]
+
+
+def test_zarr_listing_honours_a_slash_dimension_separator(monkeypatch):
+    from mermin_corpus import fetch
+
+    def fake_get(url, client=None):
+        assert url.endswith("/.zmetadata") or url.endswith("/2/.zarray")
+        if url.endswith("/.zmetadata"):
+            raise RuntimeError("404")
+        return json.dumps({
+            "shape": [2, 2, 4, 4], "chunks": [1, 1, 4, 4],
+            "dimension_separator": "/",
+        }).encode()
+
+    monkeypatch.setattr(fetch, "_zarr_get", fake_get)
+    keys = fetch._zarr_listing("https://example.test/s.zarr", "2")
+    assert keys == ["2/.zarray", "2/0/0/0/0", "2/0/1/0/0", "2/1/0/0/0", "2/1/1/0/0"]
