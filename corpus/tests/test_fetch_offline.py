@@ -132,3 +132,43 @@ def test_hash_mismatch_on_refetch_raises(corpus):
     m2.save()
     with pytest.raises(FetchError, match="sha256"):
         fetch_entry(load(corpus), "phantom-uniform", force=True)
+
+
+def test_unsupported_kind_does_not_destroy_existing_raw(corpus, tmp_path, monkeypatch):
+    m = load(corpus)
+    fetch_entry(m, "phantom-uniform")
+    raw = tmp_path / "commercial-safe" / "phantom-uniform" / "raw"
+    before = sorted(p.name for p in raw.iterdir())
+    assert before
+
+    # Re-point the same entry at a kind that has no fetcher yet.
+    m2 = load(corpus)
+    m2._table("phantom-uniform")["source"]["kind"] = "ome-zarr"
+    m2._table("phantom-uniform")["source"]["url"] = "https://example.test/x.zarr"
+    m2.save()
+
+    with pytest.raises(FetchError, match="not implemented"):
+        fetch_entry(load(corpus), "phantom-uniform", force=True)
+
+    assert sorted(p.name for p in raw.iterdir()) == before
+
+
+def test_a_failing_fetch_leaves_the_previous_artefact_intact(corpus, tmp_path, monkeypatch):
+    m = load(corpus)
+    fetch_entry(m, "phantom-uniform")
+    raw = tmp_path / "commercial-safe" / "phantom-uniform" / "raw"
+    before = sorted(p.name for p in raw.iterdir())
+    original = (raw / before[0]).read_bytes()
+
+    from mermin_corpus import fetch as fetch_mod
+
+    def boom(entry, dest):
+        raise RuntimeError("fetch failed halfway")
+
+    monkeypatch.setitem(fetch_mod._FETCHERS, "generated", boom)
+
+    with pytest.raises(RuntimeError, match="halfway"):
+        fetch_entry(load(corpus), "phantom-uniform", force=True)
+
+    assert sorted(p.name for p in raw.iterdir()) == before
+    assert (raw / before[0]).read_bytes() == original

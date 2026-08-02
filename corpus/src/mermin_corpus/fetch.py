@@ -10,7 +10,6 @@ import datetime as _dt
 import shutil
 from pathlib import Path
 
-import numpy as np
 import tifffile
 
 from .errors import FetchError
@@ -70,6 +69,11 @@ def _fetch_local(entry: Entry) -> Path:
     return src
 
 
+_FETCHERS = {
+    "generated": _fetch_generated,
+}
+
+
 def fetch_entry(manifest: Manifest, entry_id: str, force: bool = False) -> Path:
     entry = manifest.get(entry_id)
     validate_entry(entry)
@@ -81,18 +85,27 @@ def fetch_entry(manifest: Manifest, entry_id: str, force: bool = False) -> Path:
             _record(manifest, entry, target)
             return target
 
-        dest = raw_path(entry)
-        already = dest.exists() and any(dest.iterdir())
-        if already and not force:
-            return next(iter(sorted(dest.iterdir())))
-
-        if already and force:
-            shutil.rmtree(dest)
-
-        if kind == "generated":
-            out = _fetch_generated(entry, dest)
-        else:
+        fetcher = _FETCHERS.get(kind)
+        if fetcher is None:
             raise FetchError(f"{entry.id}: source kind {kind} is not implemented yet")
 
+        dest = raw_path(entry)
+        if dest.exists() and any(dest.iterdir()) and not force:
+            return next(iter(sorted(dest.iterdir())))
+
+        # Fetch into staging first, so an existing artefact is only ever
+        # replaced by a complete one. A failed fetch leaves the old bytes
+        # untouched rather than deleting them and raising.
+        staging = dest.parent / f".{dest.name}.incoming"
+        if staging.exists():
+            shutil.rmtree(staging)
+        out = fetcher(entry, staging)
+        relative = out.relative_to(staging)
+
+        if dest.exists():
+            shutil.rmtree(dest)
+        ensure(dest.parent)
+        staging.rename(dest)
+
         _record(manifest, entry, dest)
-        return out
+        return dest / relative
