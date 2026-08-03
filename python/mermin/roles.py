@@ -14,6 +14,11 @@ from dataclasses import dataclass
 
 SYNTHETIC_NAME = re.compile(r"^Channel:\d+:\d+$")
 
+# Fluorescence emission sits within roughly this window. A numeric channel
+# name outside it is an index or an identifier, not a wavelength.
+MIN_WAVELENGTH_NM = 300.0
+MAX_WAVELENGTH_NM = 900.0
+
 NUCLEAR_TERMS = ("dapi", "hoechst", "dna", "nucleus", "nuclei")
 # Targets, never dyes. A fluorophore name such as CY5, TMR or AF647 says
 # what was conjugated, not what was stained, so it cannot identify a role.
@@ -48,7 +53,10 @@ class RoleResolution:
 
 def _as_wavelength(name: str) -> float | None:
     try:
-        return float(name)
+        value = float(name)
+        if MIN_WAVELENGTH_NM <= value <= MAX_WAVELENGTH_NM:
+            return value
+        return None
     except (TypeError, ValueError):
         return None
 
@@ -137,7 +145,18 @@ def resolve_roles(
             f"channel names {usable} identify "
             f"{'a nuclear' if nuclear_hits else 'no nuclear'} channel and "
             f"{'a fibre' if fibre_hits else 'no fibre'} channel. "
-            f"Pass an explicit mapping, for example channels={{'nuclear': 0, 'fibre': 1}}."
+            f"Pass an explicit mapping, for example "
+            f"open_image(path, channels={{'nuclear': 0, 'fibre': 1}})."
+        )
+
+    present_emission = [v for v in emission if v is not None]
+    if present_emission:
+        raise UnresolvableRoleError(
+            f"emission values {present_emission} did not resolve two roles: "
+            f"a nuclear channel needs an emission at or below {NUCLEAR_MAX_NM} nm "
+            f"and a distinct fibre channel above it. "
+            f"Pass an explicit mapping, for example "
+            f"open_image(path, channels={{'nuclear': 0, 'fibre': 1}})."
         )
 
     warnings.warn(

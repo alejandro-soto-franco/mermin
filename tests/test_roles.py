@@ -88,8 +88,21 @@ def test_emission_ignores_none_entries():
     assert (r["nuclear"].index, r["fibre"].index) == (0, 2)
 
 
-def test_no_usable_names_still_falls_back_to_position():
-    # The phantoms carry only synthetic names, so position is all there is.
-    with pytest.warns(UserWarning, match="position"):
-        r = resolve_roles(["Channel:0:0", "Channel:0:1"], [])
-    assert (r["nuclear"].index, r["fibre"].index) == (0, 1)
+def test_real_but_uncatalogued_names_raise_rather_than_guess():
+    # GFP and RFP name reporters, not targets, exactly as CY5 names a dye.
+    # Guessing here is the coin toss this resolver exists to avoid.
+    with pytest.raises(UnresolvableRoleError, match="explicit mapping"):
+        resolve_roles(["GFP", "RFP"], [])
+
+
+def test_emission_that_fails_to_resolve_raises_rather_than_assuming_position():
+    with pytest.raises(UnresolvableRoleError, match="did not resolve"):
+        resolve_roles(["Channel:0:0", "Channel:0:1"], [650.0, None])
+    with pytest.raises(UnresolvableRoleError, match="did not resolve"):
+        resolve_roles(["Channel:0:0", "Channel:0:1"], [600.0, 700.0])
+
+
+def test_numeric_names_outside_the_plausible_window_are_not_wavelengths():
+    # Bare channel indices as names must not be read as emission.
+    with pytest.raises(UnresolvableRoleError):
+        resolve_roles(["0.0", "1.0"], [])
