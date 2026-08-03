@@ -11,8 +11,9 @@ guess.
 
 The pixel-size and emission logic below reproduces what phase 1's corpus
 prober (`corpus/src/mermin_corpus/probe.py`) proved against ten real files.
-It is not imported from there, since `corpus/` is developer tooling that
-never ships, but the two lessons it earned carry over unchanged:
+It is not imported from there: `corpus/**` is excluded from the maturin
+wheel build in `mermin-py/pyproject.toml`, so it never ships, but the two
+lessons it earned carry over unchanged:
 
 - `bioio-tifffile`'s own `physical_pixel_sizes` cannot be trusted for TIFFs.
   Its reader maps an unset `ResolutionUnit` to a microns scalar of 1 by
@@ -27,6 +28,7 @@ never ships, but the two lessons it earned carry over unchanged:
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,7 +47,7 @@ _TIFF_SUFFIXES = {".tif", ".tiff"}
 _LOWER_PERCENTILE = 1.0
 _UPPER_PERCENTILE = 99.5
 
-_SUPPORTED_PROJECTIONS = {"single"}
+_SUPPORTED_PROJECTIONS = {"single", "max", "mean"}
 
 
 class PixelSizeError(Exception):
@@ -173,7 +175,8 @@ def _emission_nm(path: Path, n_channels: int) -> list[float | None]:
     label count does not match the channel count, the emission cannot be
     trusted to line up with channel index, so it is dropped rather than
     misaligned, and role resolution falls through to name matching or the
-    position fallback instead.
+    position fallback instead; a `UserWarning` names both counts so the drop
+    is visible rather than silent.
     """
     if path.suffix.lower() not in _TIFF_SUFFIXES:
         return [None] * n_channels
@@ -182,6 +185,14 @@ def _emission_nm(path: Path, n_channels: int) -> list[float | None]:
         match = _EMISSION.search(label)
         out.append(float(match.group(1)) if match else None)
     if len(out) != n_channels:
+        if out:
+            warnings.warn(
+                f"{len(out)} ImageJ labels for {n_channels} channels, so "
+                f"per-channel emission cannot be read; falling back to "
+                f"channel names",
+                UserWarning,
+                stacklevel=3,
+            )
         return [None] * n_channels
     return out
 
@@ -196,6 +207,30 @@ def _squeezed_axes(image: BioImage) -> str:
     order = "".join(image.dims.order)
     shape = [int(n) for n in image.dims.shape]
     return "".join(a for a, n in zip(order, shape) if n > 1 or a in "CYX")
+
+
+def _select_plane(
+    image: BioImage, index: int, projection: str, z: int, t: int
+) -> np.ndarray:
+    """The `YX` plane for one channel, under the given projection policy.
+
+    `"single"` takes the plane at `z`/`t` directly. `"max"`/`"mean"` read the
+    whole Z stack for the channel at `t` and reduce over Z, before any
+    normalisation, so the percentile stretch in `_normalise` sees the
+    projected plane rather than one slice of it. When the file has no Z axis,
+    or Z has extent 1, a reduction over one plane is that plane, so all three
+    modes return the single plane rather than raising: `idr0047` (Z=25) and
+    `idr0062` (Z=236) make this a real branch, not a hypothetical one, but a
+    `CYX` file with no Z axis at all must still work under `projection="max"`
+    without the caller special-casing it.
+    """
+    z_size = int(image.dims.Z)
+    if projection == "single" or z_size <= 1:
+        return image.get_image_data("YX", C=index, Z=z, T=t)
+    stack = image.get_image_data("ZYX", C=index, T=t)
+    if projection == "max":
+        return stack.max(axis=0)
+    return stack.mean(axis=0)
 
 
 def _normalise(plane: np.ndarray) -> np.ndarray:
@@ -240,7 +275,7 @@ def open_image(
 
     planes = {
         role_name: _normalise(
-            image.get_image_data("YX", C=resolution.index, Z=z, T=t)
+            _select_plane(image, resolution.index, projection, z, t)
         )
         for role_name, resolution in roles.items()
     }
