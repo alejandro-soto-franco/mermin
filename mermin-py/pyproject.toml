@@ -17,7 +17,14 @@ dependencies = [
     "scipy>=1.12",
     "matplotlib>=3.8",
     "tifffile>=2024.1",
+    "bioio>=3.0",
+    "bioio-ome-tiff>=1.0",
+    "bioio-ome-zarr>=2.0",
+    "bioio-tifffile>=1.0",
 ]
+
+[project.optional-dependencies]
+vendor-formats = ["bioio-czi>=2.0", "bioio-lif>=2.0", "bioio-nd2>=2.0"]
 
 [tool.maturin]
 python-source = "../python"
