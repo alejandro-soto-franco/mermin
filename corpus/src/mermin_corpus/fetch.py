@@ -54,14 +54,17 @@ def _record(manifest: Manifest, entry: Entry, target: Path) -> None:
 
 
 def _fetch_generated(entry: Entry, dest: Path) -> Path:
-    result = generate(entry.source["generator"], int(entry.source["seed"]))
+    try:
+        result = generate(entry.source["generator"], int(entry.source["seed"]))
+    except ValueError as exc:
+        raise FetchError(f"{entry.id}: {exc}") from exc
     ensure(dest)
     out = dest / f"{entry.id}.tif"
     tifffile.imwrite(
         out,
         result.image,
         imagej=True,
-        metadata={"axes": result.axes},
+        metadata={"axes": result.axes, "unit": "micron"},
         resolution=(1.0 / result.pixel_size_um, 1.0 / result.pixel_size_um),
     )
     return out
@@ -76,12 +79,17 @@ def _fetch_local(entry: Entry) -> Path:
 
 def _download(url: str, dest_file: Path) -> None:
     ensure(dest_file.parent)
-    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
-        with client.stream("GET", url) as response:
-            response.raise_for_status()
-            with dest_file.open("wb") as fh:
-                for chunk in response.iter_bytes(chunk_size=1 << 16):
-                    fh.write(chunk)
+    try:
+        with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+            with client.stream("GET", url) as response:
+                response.raise_for_status()
+                with dest_file.open("wb") as fh:
+                    for chunk in response.iter_bytes(chunk_size=1 << 16):
+                        fh.write(chunk)
+    except httpx.HTTPStatusError as exc:
+        raise FetchError(f"{url} returned {exc.response.status_code}") from exc
+    except httpx.HTTPError as exc:
+        raise FetchError(f"cannot reach {url}: {exc}") from exc
 
 
 def _url_filename(url: str) -> str:

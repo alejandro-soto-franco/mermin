@@ -46,7 +46,7 @@ def test_hexatic_lattice_truth_records_k_six():
 
 
 def test_unknown_generator_raises():
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="nope"):
         generate("nope", seed=1)
 
 

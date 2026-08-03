@@ -20,8 +20,12 @@ axes = "CYX"
 shape = [2, 256, 256]
 dtype = "uint16"
 size_c = 2
-pixel_size_um = 0.0
+pixel_size_um = 0.5
 reader = "bioio_tifffile"
+n_artefacts = 1
+uniform = true
+size_c_observed = [2]
+shape_observed = [[2, 256, 256]]
 [entry.roles]
 nuclear = { by = "index", value = 0 }
 fibre = { by = "index", value = 1 }
@@ -30,8 +34,8 @@ projection = "single"
 z = 0
 t = 0
 [entry.provenance]
-access_date = "2026-08-02"
-raw_sha256 = "7a7ec5962ff1df1541da2a4e597373122147fa3d5677947c183c409c4d2816a4"
+access_date = "2026-08-03"
+raw_sha256 = "fd412d8b230aeef574104c5a846dd17179681eafcb3d3182ac230ee3848d4fe8"
 raw_bytes = 262662
 status = "probed"
 
@@ -53,8 +57,12 @@ axes = "CYX"
 shape = [2, 256, 256]
 dtype = "uint16"
 size_c = 2
-pixel_size_um = 0.0
+pixel_size_um = 0.5
 reader = "bioio_tifffile"
+n_artefacts = 1
+uniform = true
+size_c_observed = [2]
+shape_observed = [[2, 256, 256]]
 [entry.roles]
 nuclear = { by = "index", value = 0 }
 fibre = { by = "index", value = 1 }
@@ -63,8 +71,8 @@ projection = "single"
 z = 0
 t = 0
 [entry.provenance]
-access_date = "2026-08-02"
-raw_sha256 = "7a3878ae81a4498df4ed50dc08f5a99bc7870f3c8313b7cbba154833feb397a5"
+access_date = "2026-08-03"
+raw_sha256 = "a074930e4ed743845a3d67cb4cb44d745548e2de47dd9eb990f70736431a7138"
 raw_bytes = 262662
 status = "probed"
 
@@ -86,8 +94,12 @@ axes = "CYX"
 shape = [2, 256, 256]
 dtype = "uint16"
 size_c = 2
-pixel_size_um = 0.0
+pixel_size_um = 0.5
 reader = "bioio_tifffile"
+n_artefacts = 1
+uniform = true
+size_c_observed = [2]
+shape_observed = [[2, 256, 256]]
 [entry.roles]
 nuclear = { by = "index", value = 0 }
 fibre = { by = "index", value = 1 }
@@ -96,8 +108,8 @@ projection = "single"
 z = 0
 t = 0
 [entry.provenance]
-access_date = "2026-08-02"
-raw_sha256 = "80dc388823400b38e1c2e06d740a1cd77cab4fb7d1c51bfc958668e5e131b4eb"
+access_date = "2026-08-03"
+raw_sha256 = "d2dfcf2c74a6644772dda215b2d0d6663addbfcac5f1f86cb62e6e93aae03723"
 raw_bytes = 262662
 status = "probed"
 
@@ -119,8 +131,12 @@ axes = "CYX"
 shape = [2, 256, 256]
 dtype = "uint16"
 size_c = 2
-pixel_size_um = 0.0
+pixel_size_um = 0.5
 reader = "bioio_tifffile"
+n_artefacts = 1
+uniform = true
+size_c_observed = [2]
+shape_observed = [[2, 256, 256]]
 [entry.roles]
 nuclear = { by = "index", value = 0 }
 fibre = { by = "index", value = 1 }
@@ -129,8 +145,8 @@ projection = "single"
 z = 0
 t = 0
 [entry.provenance]
-access_date = "2026-08-02"
-raw_sha256 = "ad6e8d33fc5246a9574050e8d9623610b22864269efa22175b2526caa5dfae27"
+access_date = "2026-08-03"
+raw_sha256 = "7565e2a954f958d294e48c592fb96925ff0fe4d1c2953cf9c47ff33ae027a4ff"
 raw_bytes = 262662
 status = "probed"
 
@@ -158,8 +174,11 @@ axes = "CYX"
 shape = [3, 256, 256]
 dtype = ">f4"
 size_c = 3
-pixel_size_um = 0.0
 reader = "bioio_ome_zarr"
+n_artefacts = 1
+uniform = true
+size_c_observed = [3]
+shape_observed = [[3, 256, 256]]
 [entry.roles]
 nuclear = { by = "channel_name", value = "442.0" }
 fibre = { by = "channel_name", value = "615.0" }
@@ -192,8 +211,11 @@ axes = "CZYX"
 shape = [2, 236, 275, 271]
 dtype = "uint16"
 size_c = 2
-pixel_size_um = 0.0
 reader = "bioio_ome_zarr"
+n_artefacts = 1
+uniform = true
+size_c_observed = [2]
+shape_observed = [[2, 236, 275, 271]]
 [entry.roles]
 nuclear = { by = "channel_name", value = "Dapi" }
 fibre = { by = "channel_name", value = "LaminB1" }
@@ -228,6 +250,10 @@ dtype = "uint16"
 size_c = 4
 pixel_size_um = 1.0
 reader = "bioio_ome_zarr"
+n_artefacts = 1
+uniform = true
+size_c_observed = [4]
+shape_observed = [[4, 25, 2048, 2048]]
 [entry.roles]
 nuclear = { by = "channel_name", value = "1-DAPI" }
 fibre = { by = "channel_name", value = "3-CY5" }
@@ -360,8 +386,11 @@ axes = "CYX"
 shape = [1, 1024, 1024]
 dtype = "uint16"
 size_c = 1
-pixel_size_um = 0.0
 reader = "bioio_tifffile"
+n_artefacts = 1
+uniform = true
+size_c_observed = [1]
+shape_observed = [[1, 1024, 1024]]
 [entry.roles]
 nuclear = { by = "index", value = 0 }
 fibre = { by = "index", value = 0 }
@@ -415,8 +444,11 @@ axes = "CYX"
 shape = [1, 1024, 1280]
 dtype = "uint16"
 size_c = 1
-pixel_size_um = 0.0
 reader = "bioio_tifffile"
+n_artefacts = 18
+uniform = true
+size_c_observed = [1]
+shape_observed = [[1, 1024, 1280]]
 [entry.roles]
 nuclear = { by = "index", value = 0 }
 fibre = { by = "index", value = 1 }
@@ -450,6 +482,11 @@ dtype = "uint16"
 size_c = 2
 pixel_size_um = 0.69
 reader = "bioio_tifffile"
+n_artefacts = 49
+uniform = false
+size_c_observed = [1, 2, 3]
+shape_observed = [[1, 4015, 4015], [2, 4015, 4015], [3, 4015, 4015]]
+emission_nm_observed = [[], [470.0, 666.0], [525.0, 470.0, 666.0]]
 [entry.roles]
 nuclear = { by = "emission_nm", value = 470 }
 fibre = { by = "emission_nm", value = 666 }

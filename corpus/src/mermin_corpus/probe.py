@@ -142,32 +142,39 @@ def probe_file(path: Path) -> dict[str, Any]:
     parsing on first touch, and a reader that cannot make sense of a
     particular store's dialect (an unsupported format, or a metadata shape
     it does not expect) raises whatever exception it likes, not a
-    ProbeError. The whole body is wrapped so any such failure is reported
-    against this artefact rather than crashing the caller's batch.
+    ProbeError. Only the BioImage construction and its attribute access are
+    wrapped so such a failure is reported against this artefact rather than
+    crashing the caller's batch; `_pixel_size_um` and `_emission_nm` are
+    called outside the wrapper so a bug in either of those helpers surfaces
+    as itself, rather than being mistaken for a missing reader plugin.
     """
     try:
         image = BioImage(path)
         axes = "".join(image.dims.order)
         shape = [int(n) for n in image.dims.shape]
-        squeezed = [(a, n) for a, n in zip(axes, shape) if n > 1 or a in "CYX"]
-        info: dict[str, Any] = {
-            "path": str(path),
-            "axes": "".join(a for a, _ in squeezed),
-            "shape": [n for _, n in squeezed],
-            "dtype": str(image.dtype),
-            "size_c": int(image.dims.C),
-            "pixel_size_um": _pixel_size_um(path, image),
-            "channel_names": list(image.channel_names or []),
-            "emission_nm": _emission_nm(path) if path.suffix.lower() in _TIFF_SUFFIXES else [],
-            "reader": type(image.reader).__module__.split(".")[0],
-        }
+        dtype = str(image.dtype)
+        size_c = int(image.dims.C)
+        channel_names = list(image.channel_names or [])
+        reader = type(image.reader).__module__.split(".")[0]
     except Exception as exc:
         raise ProbeError(
             f"cannot read {path}: {exc}. Likely a missing bioio reader plugin, "
             f"or a reader that cannot parse this store's metadata dialect; see "
             f"https://github.com/bioio-devs/bioio for the plugin list."
         ) from exc
-    return info
+
+    squeezed = [(a, n) for a, n in zip(axes, shape) if n > 1 or a in "CYX"]
+    return {
+        "path": str(path),
+        "axes": "".join(a for a, _ in squeezed),
+        "shape": [n for _, n in squeezed],
+        "dtype": dtype,
+        "size_c": size_c,
+        "pixel_size_um": _pixel_size_um(path, image),
+        "channel_names": channel_names,
+        "emission_nm": _emission_nm(path) if path.suffix.lower() in _TIFF_SUFFIXES else [],
+        "reader": reader,
+    }
 
 
 _ZARR_STORE_MARKERS = (".zgroup", ".zarray")
@@ -198,7 +205,31 @@ def _artefact_candidates(target: Path) -> list[Path]:
     return found
 
 
+_MAX_PROBED_ARTEFACTS = 200
+
+
+def _emission_sort_key(seq: tuple) -> tuple:
+    """A total order over `emission_nm` tuples that tolerates `None` entries.
+
+    Plain tuple comparison raises when a `None` meets a `float`, which a
+    partially parsed label can produce. Mapping `None` to a sentinel that
+    sorts before every float keeps ordering deterministic without losing it.
+    """
+    return tuple((0, 0.0) if x is None else (1, x) for x in seq)
+
+
 def probe_entry(manifest: Manifest, entry_id: str) -> dict[str, Any]:
+    """Probe every artefact belonging to `entry_id`, up to a cap.
+
+    A batch entry can register dozens of sibling files whose facts vary (a
+    mixed channel count, or emission metadata present on some files and
+    absent on others); probing only the first candidate, as an earlier
+    version of this function did, silently recorded that one file's facts as
+    though they held for the whole entry. Every candidate is probed instead,
+    capped at `_MAX_PROBED_ARTEFACTS` since metadata reads are cheap but not
+    free, and the manifest's `expected` block gains fields that describe the
+    variation across the whole entry rather than asserting a false uniformity.
+    """
     from .fetch import raw_path
 
     entry = manifest.get(entry_id)
@@ -211,20 +242,53 @@ def probe_entry(manifest: Manifest, entry_id: str) -> dict[str, Any]:
     if not candidates:
         raise ProbeError(f"{entry_id}: nothing fetched at {target}")
 
-    info = probe_file(candidates[0])
-    info["n_artefacts"] = len(candidates)
+    truncated = len(candidates) > _MAX_PROBED_ARTEFACTS
+    artefacts = [probe_file(c) for c in candidates[:_MAX_PROBED_ARTEFACTS]]
+    summary = artefacts[0]
 
     out_dir = ensure(entry_dir(entry.partition, entry.id))
-    (out_dir / "meta.json").write_text(json.dumps(info, indent=2, sort_keys=True))
+    meta = {
+        "summary": summary,
+        "artefacts": artefacts,
+        "n_artefacts": len(candidates),
+        "truncated": truncated,
+    }
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True))
 
-    manifest.set_expected(entry_id, {
-        "axes": info["axes"],
-        "shape": info["shape"],
-        "dtype": info["dtype"],
-        "size_c": info["size_c"],
-        "pixel_size_um": info["pixel_size_um"] or 0.0,
-        "reader": info["reader"],
-    })
+    axes_seen = {a["axes"] for a in artefacts}
+    dtype_seen = {a["dtype"] for a in artefacts}
+    shape_seen = sorted({tuple(a["shape"]) for a in artefacts})
+    size_c_seen = sorted({a["size_c"] for a in artefacts})
+    emission_seen = sorted(
+        {tuple(a["emission_nm"]) for a in artefacts}, key=_emission_sort_key
+    )
+    uniform = (
+        len(axes_seen) == 1
+        and len(dtype_seen) == 1
+        and len(shape_seen) == 1
+        and len(size_c_seen) == 1
+    )
+
+    expected: dict[str, Any] = {
+        "axes": summary["axes"],
+        "shape": summary["shape"],
+        "dtype": summary["dtype"],
+        "size_c": summary["size_c"],
+        "pixel_size_um": summary["pixel_size_um"],
+        "reader": summary["reader"],
+        "n_artefacts": len(candidates),
+        "uniform": uniform,
+        "size_c_observed": size_c_seen,
+        "shape_observed": [list(s) for s in shape_seen],
+    }
+    if emission_seen != [()]:
+        expected["emission_nm_observed"] = [list(e) for e in emission_seen]
+
+    manifest.set_expected(entry_id, expected)
     manifest.update_provenance(entry_id, status="probed")
     manifest.save()
-    return info
+
+    result = dict(summary)
+    result["n_artefacts"] = len(candidates)
+    result["truncated"] = truncated
+    return result

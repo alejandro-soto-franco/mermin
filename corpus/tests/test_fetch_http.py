@@ -1,8 +1,10 @@
 import io
 import zipfile
 
+import httpx
 import pytest
 
+from mermin_corpus.errors import FetchError
 from mermin_corpus.fetch import fetch_entry
 from mermin_corpus.manifest import load
 
@@ -91,6 +93,49 @@ def fake_http(monkeypatch):
 
     monkeypatch.setattr("mermin_corpus.fetch.httpx.Client", FakeClient)
     return store
+
+
+class FakeErrorResponse:
+    def __init__(self, status_code: int, url: str):
+        self.status_code = status_code
+        self.headers = {}
+        self._url = url
+
+    def raise_for_status(self):
+        request = httpx.Request("GET", self._url)
+        response = httpx.Response(self.status_code, request=request)
+        raise httpx.HTTPStatusError(
+            f"{self.status_code}", request=request, response=response
+        )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_http_404_surfaces_as_fetch_error_not_httpx_exception(tmp_path, monkeypatch):
+    monkeypatch.setenv("MERMIN_CORPUS_ROOT", str(tmp_path))
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def stream(self, method, url, **k):
+            return FakeErrorResponse(404, url)
+
+    monkeypatch.setattr("mermin_corpus.fetch.httpx.Client", FakeClient)
+    p = _manifest(tmp_path, "missing-entry", "http", "https://example.test/missing.tif")
+
+    with pytest.raises(FetchError, match="404"):
+        fetch_entry(load(p), "missing-entry")
 
 
 def test_http_entry_downloads_to_raw(tmp_path, monkeypatch, fake_http):

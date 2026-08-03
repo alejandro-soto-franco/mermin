@@ -83,12 +83,19 @@ def test_probe_entry_writes_meta_and_fills_expected(tmp_path, monkeypatch):
 
     info = probe_entry(load(p), "phantom-uniform")
     meta = tmp_path / "commercial-safe" / "phantom-uniform" / "meta.json"
-    assert json.loads(meta.read_text())["axes"] == "CYX"
+    meta_doc = json.loads(meta.read_text())
+    assert meta_doc["summary"]["axes"] == "CYX"
+    assert meta_doc["n_artefacts"] == 1
+    assert meta_doc["truncated"] is False
+    assert len(meta_doc["artefacts"]) == 1
     assert info["size_c"] == 2
 
     e = load(p).get("phantom-uniform")
     assert e.expected["axes"] == "CYX"
     assert e.expected["size_c"] == 2
+    assert e.expected["n_artefacts"] == 1
+    assert e.expected["uniform"] is True
+    assert e.expected["size_c_observed"] == [2]
     assert e.provenance["status"] == "probed"
 
 
@@ -315,6 +322,40 @@ def test_probe_entry_treats_a_zarr_store_directory_as_one_candidate(tmp_path, mo
     (chunk_dir / "0.0.0.0.0").write_bytes(b"\x00" * 16)
 
     assert _artefact_candidates(raw) == [store]
+
+
+@pytest.mark.drive
+def test_drive_reprobe_matches_the_recorded_expected_for_variable_entries():
+    """Re-probing the live corpus must reproduce what is already recorded.
+
+    This is the automated check for the branch's central claim: that
+    montano-hvf-2026-04's `expected` block now records the batch's channel
+    variation across all forty-nine files, rather than one file's facts
+    standing in for the whole entry.
+    """
+    import os
+    from pathlib import Path
+
+    if not os.path.ismount(Path("/mnt/ASF-EX1")):
+        pytest.skip("ASF-EX1 is not mounted")
+
+    from mermin_corpus.manifest import load, manifest_path
+
+    entry_ids = ["montano-hvf-2026-04", "bbbc021-week4-27481", "phantom-uniform"]
+    before = {eid: dict(load(manifest_path()).get(eid).expected) for eid in entry_ids}
+
+    for eid in entry_ids:
+        probe_entry(load(manifest_path()), eid)
+
+    after = {eid: dict(load(manifest_path()).get(eid).expected) for eid in entry_ids}
+    for eid in entry_ids:
+        assert after[eid] == before[eid], (
+            f"{eid}: re-probing disagrees with the recorded expected block"
+        )
+
+    montano = after["montano-hvf-2026-04"]
+    assert montano["uniform"] is False
+    assert montano["size_c_observed"] == [1, 2, 3]
 
 
 def test_probe_imports_no_mermin_code():

@@ -88,7 +88,7 @@ def test_set_expected_writes_the_probe_block(manifest_file):
     assert load(manifest_file).get("phantom-uniform").expected["axes"] == "CYX"
 
 
-def test_validate_rejects_a_licence_partition_mismatch(manifest_file):
+def test_validate_rejects_an_access_partition_mismatch(manifest_file):
     m = load(manifest_file)
     e = m.get("phantom-uniform")
     e.partition = "commercial-safe"
@@ -111,6 +111,26 @@ def test_validate_requires_a_source_locator(manifest_file):
     e.source = {"kind": "http"}
     with pytest.raises(ManifestError, match="url"):
         validate_entry(e)
+
+
+def test_save_survives_a_failure_partway_through(manifest_file, monkeypatch):
+    m = load(manifest_file)
+    m.update_provenance("phantom-uniform", status="fetched")
+    m.save()
+    good = manifest_file.read_text()
+
+    m.update_provenance("phantom-uniform", status="probed")
+
+    def boom(_doc):
+        raise RuntimeError("dumps failed")
+
+    monkeypatch.setattr("mermin_corpus.manifest.tomlkit.dumps", boom)
+    with pytest.raises(RuntimeError, match="dumps failed"):
+        m.save()
+
+    assert manifest_file.read_text() == good
+    assert load(manifest_file).get("phantom-uniform").provenance["status"] == "fetched"
+    assert not manifest_file.with_name(f".{manifest_file.name}.tmp").exists()
 
 
 def test_direct_entry_mutation_does_not_persist(manifest_file):

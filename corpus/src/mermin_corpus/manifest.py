@@ -6,6 +6,7 @@ the document.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -84,21 +85,27 @@ class Manifest:
 
     @staticmethod
     def _entry(table: Any) -> Entry:
-        return Entry(
-            id=str(table["id"]),
-            rung=int(table["rung"]),
-            partition=str(table["partition"]),
-            access=str(table["access"]),
-            licence=str(table["licence"]),
-            attribution=str(table.get("attribution", "")),
-            doi=str(table.get("doi", "")),
-            retain_raw=bool(table.get("retain_raw", True)),
-            source=dict(table.get("source", {})),
-            expected=dict(table.get("expected", {})),
-            roles=dict(table.get("roles", {})),
-            policy=dict(table.get("policy", {})),
-            provenance=dict(table.get("provenance", {})),
-        )
+        entry_id = str(table.get("id", "")) or None
+        try:
+            return Entry(
+                id=str(table["id"]),
+                rung=int(table["rung"]),
+                partition=str(table["partition"]),
+                access=str(table["access"]),
+                licence=str(table["licence"]),
+                attribution=str(table.get("attribution", "")),
+                doi=str(table.get("doi", "")),
+                retain_raw=bool(table.get("retain_raw", True)),
+                source=dict(table.get("source", {})),
+                expected=dict(table.get("expected", {})),
+                roles=dict(table.get("roles", {})),
+                policy=dict(table.get("policy", {})),
+                provenance=dict(table.get("provenance", {})),
+            )
+        except KeyError as exc:
+            field = exc.args[0]
+            where = f" in entry {entry_id!r}" if entry_id else ""
+            raise ManifestError(f"manifest entry missing required field {field!r}{where}") from exc
 
     def get(self, entry_id: str) -> Entry:
         for e in self.entries:
@@ -119,13 +126,26 @@ class Manifest:
         self.get(entry_id).provenance.update(fields)
 
     def set_expected(self, entry_id: str, expected: dict[str, Any]) -> None:
+        """Write the entry's expected block.
+
+        TOML has no null, so a `None` value removes the key from the table
+        rather than writing it; the in-memory `Entry.expected` mirrors that
+        removal.
+        """
         table = self._table(entry_id)["expected"]
+        live = self.get(entry_id).expected
         for key, value in expected.items():
-            table[key] = value
-        self.get(entry_id).expected.update(expected)
+            if value is None:
+                table.pop(key, None)
+                live.pop(key, None)
+            else:
+                table[key] = value
+                live[key] = value
 
     def save(self) -> None:
-        self.path.write_text(tomlkit.dumps(self._doc))
+        tmp = self.path.with_name(f".{self.path.name}.tmp")
+        tmp.write_text(tomlkit.dumps(self._doc))
+        os.replace(tmp, self.path)
 
 
 def manifest_path() -> Path:

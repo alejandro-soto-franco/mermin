@@ -22,6 +22,12 @@ PERIOD_PX = 8.0
 
 @dataclass
 class PhantomResult:
+    """A generated phantom, its known director field, and the truth it implies.
+
+    `truth["positions_px"]`, where present, is in absolute pixel coordinates;
+    `theta` is indexed in the same frame as `image`.
+    """
+
     image: np.ndarray
     axes: str
     pixel_size_um: float
@@ -134,4 +140,10 @@ GENERATORS: dict[str, Callable[[int], PhantomResult]] = {
 
 
 def generate(name: str, seed: int) -> PhantomResult:
-    return GENERATORS[name](seed)
+    try:
+        generator = GENERATORS[name]
+    except KeyError:
+        raise ValueError(
+            f"unknown generator {name!r}; valid names are {sorted(GENERATORS)}"
+        ) from None
+    return generator(seed)
