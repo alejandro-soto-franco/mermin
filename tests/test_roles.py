@@ -24,10 +24,17 @@ def test_vocabulary_matches_case_insensitively():
 
 
 def test_vocabulary_matches_a_prefixed_label():
-    # idr0047 prefixes fluorophores with an acquisition order.
-    r = resolve_roles(["3-CY5", "5-TMR", "1-DAPI", "7-TRANS"], [])
-    assert r["nuclear"].index == 2
-    assert r["fibre"].index == 0
+    # An acquisition-order prefix must not defeat the match.
+    r = resolve_roles(["1-DAPI", "2-Vimentin"], [])
+    assert r["nuclear"].index == 0
+    assert r["fibre"].index == 1
+    assert r["nuclear"].mechanism == "name"
+
+
+def test_fluorophore_names_do_not_identify_a_fibre_target():
+    # idr0047 labels channels by dye, so the fibre target is unknowable.
+    with pytest.raises(UnresolvableRoleError, match="explicit mapping"):
+        resolve_roles(["3-CY5", "5-TMR", "1-DAPI", "7-TRANS"], [])
 
 
 def test_numeric_names_are_treated_as_emission():
@@ -79,3 +86,10 @@ def test_two_channels_matching_one_role_is_an_error():
 def test_emission_ignores_none_entries():
     r = resolve_roles(["Channel:0:0", "Channel:0:1", "Channel:0:2"], [470.0, None, 666.0])
     assert (r["nuclear"].index, r["fibre"].index) == (0, 2)
+
+
+def test_no_usable_names_still_falls_back_to_position():
+    # The phantoms carry only synthetic names, so position is all there is.
+    with pytest.warns(UserWarning, match="position"):
+        r = resolve_roles(["Channel:0:0", "Channel:0:1"], [])
+    assert (r["nuclear"].index, r["fibre"].index) == (0, 1)

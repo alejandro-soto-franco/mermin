@@ -15,13 +15,12 @@ from dataclasses import dataclass
 SYNTHETIC_NAME = re.compile(r"^Channel:\d+:\d+$")
 
 NUCLEAR_TERMS = ("dapi", "hoechst", "dna", "nucleus", "nuclei")
-# Lamins are intermediate filaments, the same family as vimentin, and the
-# nuclear lamina is a filamentous meshwork, so a lamin stain is a fibre
-# target rather than a nuclear one. Placing it under nuclear would make
-# idr0062's `LaminB1, Dapi` ambiguous and leave that entry with no fibre.
-FIBRE_TERMS = (
-    "vimentin", "tubulin", "actin", "phalloidin", "lamin", "cy5", "af647",
-)
+# Targets, never dyes. A fluorophore name such as CY5, TMR or AF647 says
+# what was conjugated, not what was stained, so it cannot identify a role.
+# One IDR study labels its channels 3-CY5, 5-TMR, 1-DAPI and 7-TRANS: the
+# nuclear channel is identifiable and the fibre channel is not, and that is
+# a case for an explicit mapping rather than a guess.
+FIBRE_TERMS = ("vimentin", "tubulin", "actin", "phalloidin", "lamin")
 
 # DAPI emits around 460 nm. Anything at or below this bound is nuclear.
 NUCLEAR_MAX_NM = 500.0
@@ -131,6 +130,15 @@ def resolve_roles(
                 "fibre", fibre_hits[0], "name", str(names[fibre_hits[0]])
             ),
         }
+
+    usable = [n for n in names if n is not None]
+    if usable:
+        raise UnresolvableRoleError(
+            f"channel names {usable} identify "
+            f"{'a nuclear' if nuclear_hits else 'no nuclear'} channel and "
+            f"{'a fibre' if fibre_hits else 'no fibre'} channel. "
+            f"Pass an explicit mapping, for example channels={{'nuclear': 0, 'fibre': 1}}."
+        )
 
     warnings.warn(
         f"no channel metadata resolved a role; assuming position, "
