@@ -31,31 +31,6 @@ def _write_unlabelled_tif(path):
     return path
 
 
-def _ingest_provenance(loaded):
-    """Mirrors the `ingest={...}` construction in `mermin.pipeline.analyze`
-    (mermin/pipeline.py, end of `analyze`), built from a real `LoadedImage`.
-
-    `analyze` itself needs the compiled `mermin._native` extension, which is
-    not built in this checkout; the task that added this test forbids
-    stubbing it. `open_image` needs no extension, and it produces exactly
-    the `roles`/`pixel_size_um`/`projection` data `analyze` feeds into
-    `ingest`, so this exercises the real shape against real ingest output
-    rather than only asserting a field name exists.
-    """
-    return {
-        "roles": {
-            role: {
-                "index": resolution.index,
-                "mechanism": resolution.mechanism,
-                "evidence": resolution.evidence,
-            }
-            for role, resolution in loaded.roles.items()
-        },
-        "pixel_size_um": loaded.pixel_size_um,
-        "projection": loaded.projection,
-    }
-
-
 def test_analyze_requires_no_default_pixel_size():
     from mermin.pipeline import analyze
 
@@ -81,6 +56,8 @@ def test_ingest_provenance_distinguishes_measured_roles_from_a_guess(tmp_path):
     `pixel_size_um` and `projection`, and that `mechanism` actually differs
     between a file with real emission metadata and one with none.
     """
+    from mermin.pipeline import _ingest_provenance
+
     measured = open_image(
         _write_emission_tif(tmp_path / "measured.tif", (470.0, 666.0)),
         pixel_size_um=0.69,

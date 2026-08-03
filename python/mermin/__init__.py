@@ -1,6 +1,17 @@
 """mermin: k-atic alignment analysis of fluorescence microscopy."""
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version as _version
+
+try:
+    # The installed wheel's version is dynamic (`dynamic = ["version"]` in
+    # mermin-py/pyproject.toml): maturin reads it from mermin-py's Cargo.toml,
+    # which takes it from `[workspace.package] version` in the root Cargo.toml.
+    # That one place is the single source of truth for an installed package.
+    __version__ = _version("mermin")
+except PackageNotFoundError:
+    # Not installed, e.g. this checkout on `sys.path` with no wheel built.
+    # Kept in step with `[workspace.package] version` in Cargo.toml by hand.
+    __version__ = "0.4.0"
 
 __all__ = [
     "open_image",

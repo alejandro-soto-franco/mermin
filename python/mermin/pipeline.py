@@ -8,13 +8,31 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from mermin.ingest import open_image
+from mermin.ingest import LoadedImage, open_image
 from mermin.segment import (
     build_neighbor_graph,
     extract_contours,
     segment_cell_bodies,
     segment_nuclei,
 )
+
+
+def _ingest_provenance(loaded: LoadedImage) -> dict[str, Any]:
+    """Record how each role was resolved, so a caller can tell a measured
+    identity from a positional guess after the fact.
+    """
+    return {
+        "roles": {
+            role: {
+                "index": resolution.index,
+                "mechanism": resolution.mechanism,
+                "evidence": resolution.evidence,
+            }
+            for role, resolution in loaded.roles.items()
+        },
+        "pixel_size_um": loaded.pixel_size_um,
+        "projection": loaded.projection,
+    }
 
 
 @dataclass
@@ -202,18 +220,7 @@ def analyze(
         frank=frank,
         ldg_params=ldg,
         persistence=persistence,
-        ingest={
-            "roles": {
-                role: {
-                    "index": resolution.index,
-                    "mechanism": resolution.mechanism,
-                    "evidence": resolution.evidence,
-                }
-                for role, resolution in loaded.roles.items()
-            },
-            "pixel_size_um": loaded.pixel_size_um,
-            "projection": loaded.projection,
-        },
+        ingest=_ingest_provenance(loaded),
     )
 
 

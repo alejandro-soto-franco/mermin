@@ -12,7 +12,7 @@
 
 Named after [N. David Mermin](https://en.wikipedia.org/wiki/N._David_Mermin), whose 1979 *Reviews of Modern Physics* paper "The topological theory of defects in ordered media" provides the mathematical framework this tool implements on experimental microscopy data.
 
-mermin takes raw multi-channel fluorescence TIFFs (e.g. DAPI + vimentin) and produces a complete physical analysis of cell alignment: shape descriptors, orientational order parameters, topological defects, spatial statistics, and continuum theory parameter estimates.
+mermin takes multi-channel fluorescence microscopy images (TIFF, OME-TIFF, OME-Zarr, and other formats [bioio](https://github.com/bioio-devs/bioio) supports) and produces a complete physical analysis of cell alignment: shape descriptors, orientational order parameters, topological defects, spatial statistics, and continuum theory parameter estimates. The nuclear and fibre channel roles are resolved from file metadata, or supplied explicitly.
 
 ## Features
 
@@ -21,8 +21,8 @@ mermin takes raw multi-channel fluorescence TIFFs (e.g. DAPI + vimentin) and pro
 - **Multiscale structure tensor**: orientation $\theta(\mathbf{x})$ and coherence $C(\mathbf{x})$ fields at logarithmically spaced scales (subcellular to tissue-level)
 - **$k$-atic order parameter fields**: $\psi_k(\mathbf{x}, \sigma) = C \cdot e^{ik\theta}$ for arbitrary $k$
 - **Nuclear ellipse fitting**: aspect ratio and orientation from DAPI masks via moments of inertia
-- **Topological defect detection**: half-integer and integer charge defects via [cartan](https://crates.io/crates/cartan-geo) SO(3) holonomy, with Poincar&eacute;--Hopf validation
-- **Persistent homology**: boundary matrix reduction on Delaunay filtration by ascending alignment magnitude
+- **Topological defect detection**: half-integer and integer charge defects via [cartan](https://crates.io/crates/cartan-geo) SO(3) holonomy. Poincar&eacute;--Hopf validation is implemented in `mermin-topo` and exposed to Python, but `analyze()` does not call it yet.
+- **Persistent homology**: boundary matrix reduction on Delaunay filtration by ascending alignment magnitude, implemented in `mermin-topo` and exposed to Python; `analyze()` does not call it yet, so `AnalysisResult.persistence` is always empty
 - **Orientational correlation functions**: $G_k(r) = \langle \cos k(\theta_i - \theta_j) \rangle$ with exponential fit for correlation length $\xi_k$
 - **Ripley's $K$-function**: spatial clustering analysis for defect point patterns
 - **Spatial block bootstrap**: confidence intervals that respect spatial autocorrelation
@@ -46,7 +46,7 @@ Requires Python 3.10+. The Rust extension is compiled automatically via [maturin
 
 ```toml
 [dependencies]
-mermin = "0.1"
+mermin = "0.4"
 ```
 
 ### Build from source
@@ -65,11 +65,12 @@ maturin develop --release
 ```python
 import mermin
 
-# Single image analysis
+# Explicit role mapping and pixel size. `channels` maps roles, not names,
+# to channel indices: "nuclear" and "fibre" are the only two roles.
 result = mermin.analyze(
     "path/to/image.tif",
-    channels={"dapi": 0, "vimentin": 1},
-    pixel_size_um=0.345,
+    channels={"nuclear": 0, "fibre": 1},
+    pixel_size_um=0.69,
 )
 
 print(result.summary())
@@ -78,13 +79,32 @@ print(result.summary())
 # Per-cell measurements as a polars DataFrame
 result.cells.head()
 
+# Metadata-driven: with neither `channels` nor `pixel_size_um` given, roles
+# and pixel size are both read from the file's own metadata. An image with
+# no calibration raises `mermin.ingest.PixelSizeError` naming the file.
+result = mermin.analyze("path/to/image.tif")
+
 # Batch experiment with condition comparison
-experiment = mermin.Experiment(pixel_size_um=0.345)
+experiment = mermin.Experiment(pixel_size_um=0.69)
 experiment.add_condition("ctrl", ["d01.tif", "d02.tif", "d03.tif"])
 experiment.add_condition("tgfb1", ["d07.tif", "d08.tif", "d09.tif"])
 comparison = experiment.run()
 comparison.report("output/")
 ```
+
+## Breaking changes (0.4.0)
+
+- `channels` maps roles to channel indices, not channel names to indices.
+  `channels={"dapi": 0, "vimentin": 1}` no longer resolves; pass
+  `channels={"nuclear": 0, "fibre": 1}`, or omit `channels` entirely to
+  resolve roles from file metadata.
+- `pixel_size_um` no longer defaults, in `analyze`, `open_image` and
+  `Experiment` alike. Pass it explicitly or rely on the file's own
+  calibration; an image with neither raises `mermin.ingest.PixelSizeError`
+  naming the file, rather than assuming a value.
+- `io.py`, `load_tiff` and `discover_tiffs` are removed, with no
+  compatibility shim. Use `mermin.ingest.open_image`, which resolves roles
+  from metadata and reads TIFF, OME-TIFF and OME-Zarr via bioio.
 
 ### Rust
 
@@ -124,24 +144,31 @@ let defects = detect_defects(&cell_thetas, nx, ny, 2, std::f64::consts::FRAC_PI_
 ## Analysis Pipeline
 
 ```
-TIFF (DAPI + Vimentin)
+TIFF, OME-TIFF, OME-Zarr (nuclear + fibre channels)
   |
-  +-- 1. Preprocessing ---- background subtraction, contrast normalization
+  +-- 1. Preprocessing ---- percentile contrast normalisation
   |
-  +-- 2. Segmentation ----- Cellpose (nuclei), watershed (cell bodies), Delaunay graph
+  +-- 2. Segmentation ----- Cellpose (nuclei), watershed (cell bodies)
   |
   +-- 3. Shape analysis ---- Minkowski tensors, Fourier modes, morphometrics
   |
   +-- 4. Orientation ------- multiscale structure tensor, k-atic fields, nuclear ellipse
   |
-  +-- 5. Topology ---------- defect detection (holonomy), Poincare-Hopf, persistence
+  +-- 5. Topology ---------- defect detection (holonomy)
   |
   +-- 6. Statistics -------- G_k(r), Ripley's K, block bootstrap, permutation tests
   |
   +-- 7. Theory ------------ Frank energy, Landau-de Gennes fit, activity estimation
   |
-  +-- Output: per-cell CSV, field arrays, JSON statistics, HTML report
+  +-- Output: `AnalysisResult` (per-cell polars DataFrame, field arrays, in memory).
+      `Experiment.report()` writes a JSON summary of per-image results.
 ```
+
+`analyze()` returns per-cell shape, orientation, defect, correlation and
+theory measurements. Neighbour-graph construction (`build_neighbor_graph`),
+Poincar&eacute;--Hopf validation and persistent homology are implemented but not
+yet called from `analyze()`; `AnalysisResult.persistence` is always empty.
+Plotting and HTML report generation (`mermin.viz`) are not yet implemented.
 
 ## Three Independent $k$-atic Measurements
 
@@ -154,6 +181,8 @@ mermin extracts three independent orientational measurements per cell, each with
 | **Collective $k$-atic** | Neighbour correlations on Delaunay graph | How aligned the cell is with its neighbours |
 
 Agreement or disagreement between these layers is itself diagnostic. A TGF-$\beta$-treated myofibroblast shows concordance across all three. A ROCK-inhibited cell may show a round shape (low shape $k{=}2$) but residual internal fibre alignment (higher internal $k{=}2$).
+
+Shape $k$-atic modes are computed per cell in `mermin-shape`. Internal and collective $k$-atic values are computed by `mermin-orient` and `mermin-stats` respectively, and are exposed to Python, but `analyze()`'s per-cell `cells` table does not yet carry any of the three: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, for a caller to derive them from directly.
 
 ## Performance
 
@@ -178,7 +207,7 @@ mermin builds on the [cartan](https://crates.io/crates/cartan) ecosystem for dif
 - **cartan-geo**: holonomy-based topological defect detection
 - **cartan-optim**: Riemannian trust region for Landau-de Gennes fitting
 
-Python dependencies: cellpose, scikit-image, scipy, polars, matplotlib, tifffile.
+Python dependencies: numpy, polars, cellpose, scikit-image, scipy, matplotlib, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O.
 
 ## License
 

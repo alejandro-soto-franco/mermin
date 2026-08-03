@@ -21,6 +21,7 @@ dependencies = [
     "bioio-ome-tiff>=1.0",
     "bioio-ome-zarr>=2.0",
     "bioio-tifffile>=1.0",
+    "fsspec>=2024.12.0",
 ]
 
 [project.optional-dependencies]
