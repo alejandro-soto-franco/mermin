@@ -219,9 +219,14 @@ def analyze(
 
 @dataclass
 class Experiment:
-    """Batch analysis with condition comparison."""
+    """Batch analysis with condition comparison.
 
-    pixel_size_um: float = 0.345
+    `pixel_size_um` has no default: as in `analyze`, it is read from each
+    file's metadata unless supplied here, and an absent calibration raises
+    `mermin.ingest.PixelSizeError` naming the file.
+    """
+
+    pixel_size_um: float | None = None
     conditions: dict[str, list[str]] = field(default_factory=dict)
 
     def add_condition(self, name: str, paths: list[str]):

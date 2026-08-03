@@ -9,6 +9,8 @@ __all__ = [
     "segment_cell_bodies",
     "extract_contours",
     "build_neighbor_graph",
+    "analyze",
+    "Experiment",
 ]
 
 
@@ -24,5 +26,8 @@ def __getattr__(name: str):
             extract_contours,
             build_neighbor_graph,
         )
+        return locals()[name]
+    elif name in ("analyze", "Experiment"):
+        from mermin.pipeline import Experiment, analyze
         return locals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
