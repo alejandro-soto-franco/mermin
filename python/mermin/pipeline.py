@@ -51,16 +51,16 @@ class AnalysisResult:
     def summary(self) -> str:
         n = len(self.cells)
         n_def = len(self.defects)
-        mean_psi2 = (
-            self.cells["internal_katic_k2"].mean()
-            if "internal_katic_k2" in self.cells.columns
-            else 0.0
-        )
-        return (
-            f"mermin analysis: {n} cells, {n_def} defects, "
-            f"mean |psi_2| = {mean_psi2:.3f}, "
-            f"Frank ratio = {self.frank.get('ratio', 0):.2f}"
-        )
+        parts = [f"mermin analysis: {n} cells, {n_def} defects"]
+        # `analyze()` does not yet populate `internal_katic_k2` on the
+        # per-cell table (see the k-atic measurements section of the
+        # README), so the term is omitted rather than reported as a mean
+        # of zero when the column is absent.
+        if "internal_katic_k2" in self.cells.columns:
+            mean_psi2 = self.cells["internal_katic_k2"].mean()
+            parts.append(f"mean |psi_2| = {mean_psi2:.3f}")
+        parts.append(f"Frank ratio = {self.frank.get('ratio', 0):.2f}")
+        return ", ".join(parts)
 
 
 def analyze(
@@ -226,14 +226,22 @@ def analyze(
 
 @dataclass
 class Experiment:
-    """Batch analysis with condition comparison.
+    """Batch analysis across conditions.
 
     `pixel_size_um` has no default: as in `analyze`, it is read from each
     file's metadata unless supplied here, and an absent calibration raises
-    `mermin.ingest.PixelSizeError` naming the file.
+    `mermin.ingest.PixelSizeError` naming the file. `channels`, `projection`,
+    `z` and `t` take the same defaults as `analyze` and are passed through to
+    every file in the batch, so a file needing an explicit channel mapping,
+    or a non-default Z/T selection, is reachable from `Experiment` and not
+    only from a direct `analyze()` call.
     """
 
     pixel_size_um: float | None = None
+    channels: dict[str, int] | None = None
+    projection: str = "single"
+    z: int = 0
+    t: int = 0
     conditions: dict[str, list[str]] = field(default_factory=dict)
 
     def add_condition(self, name: str, paths: list[str]):
@@ -243,7 +251,15 @@ class Experiment:
         results = {}
         for cond, paths in self.conditions.items():
             results[cond] = [
-                analyze(p, pixel_size_um=self.pixel_size_um) for p in paths
+                analyze(
+                    p,
+                    channels=self.channels,
+                    pixel_size_um=self.pixel_size_um,
+                    projection=self.projection,
+                    z=self.z,
+                    t=self.t,
+                )
+                for p in paths
             ]
         return ComparisonResult(results)
 

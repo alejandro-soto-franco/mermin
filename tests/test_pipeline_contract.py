@@ -92,6 +92,55 @@ def test_experiment_does_not_default_the_pixel_size():
     assert Experiment.__dataclass_fields__["pixel_size_um"].default is None
 
 
+def test_experiment_exposes_the_same_optional_fields_as_analyze_with_the_same_defaults():
+    import inspect
+
+    from mermin.pipeline import Experiment, analyze
+
+    sig = inspect.signature(analyze)
+    for name in ("channels", "projection", "z", "t"):
+        assert name in Experiment.__dataclass_fields__
+        assert (
+            Experiment.__dataclass_fields__[name].default
+            == sig.parameters[name].default
+        )
+
+
+def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
+    """`Experiment.run()` used to call `analyze(p, pixel_size_um=...)` and
+    stop, so a file needing an explicit channel mapping, or a non-default
+    Z/T selection, was unreachable from the batch API. Assert every one of
+    the four fields actually reaches `analyze` for every path in the batch.
+    """
+    import mermin.pipeline as pipeline_module
+
+    captured = []
+
+    def fake_analyze(path, **kwargs):
+        captured.append((path, kwargs))
+        return object()
+
+    monkeypatch.setattr(pipeline_module, "analyze", fake_analyze)
+
+    experiment = pipeline_module.Experiment(
+        pixel_size_um=0.69,
+        channels={"nuclear": 0, "fibre": 1},
+        projection="max",
+        z=2,
+        t=1,
+    )
+    experiment.add_condition("ctrl", ["a.tif", "b.tif"])
+    experiment.run()
+
+    assert len(captured) == 2
+    for path, kwargs in captured:
+        assert kwargs["channels"] == {"nuclear": 0, "fibre": 1}
+        assert kwargs["pixel_size_um"] == pytest.approx(0.69)
+        assert kwargs["projection"] == "max"
+        assert kwargs["z"] == 2
+        assert kwargs["t"] == 1
+
+
 def test_analyze_and_experiment_reachable_from_package_root():
     import mermin
     from mermin.pipeline import Experiment, analyze
@@ -100,6 +149,48 @@ def test_analyze_and_experiment_reachable_from_package_root():
     assert mermin.Experiment is Experiment
     assert "analyze" in mermin.__all__
     assert "Experiment" in mermin.__all__
+
+
+def test_summary_omits_internal_katic_when_the_column_is_absent():
+    # `analyze()` never constructs `internal_katic_k2`, so `summary()` used
+    # to report a mean of exactly 0.000 unconditionally, misleadingly
+    # implying the value had been measured.
+    import polars as pl
+
+    from mermin.pipeline import AnalysisResult
+
+    result = AnalysisResult(
+        cells=pl.DataFrame({"label": [1, 2]}),
+        fields={},
+        defects=[],
+        correlations={},
+        frank={"ratio": 1.5},
+        ldg_params={},
+        persistence={"pairs": []},
+        ingest={},
+    )
+    summary = result.summary()
+    assert "psi_2" not in summary
+    assert "2 cells" in summary
+    assert "Frank ratio = 1.50" in summary
+
+
+def test_summary_reports_internal_katic_when_the_column_is_present():
+    import polars as pl
+
+    from mermin.pipeline import AnalysisResult
+
+    result = AnalysisResult(
+        cells=pl.DataFrame({"internal_katic_k2": [0.1, 0.5, 0.9]}),
+        fields={},
+        defects=[],
+        correlations={},
+        frank={"ratio": 1.0},
+        ldg_params={},
+        persistence={"pairs": []},
+        ingest={},
+    )
+    assert "mean |psi_2| = 0.500" in result.summary()
 
 
 def test_bare_import_needs_nothing_heavy():

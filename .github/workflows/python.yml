@@ -65,7 +65,8 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin pytest numpy scipy
+          pip install maturin pytest numpy scipy polars tifffile scikit-image \
+            bioio bioio-ome-tiff bioio-ome-zarr bioio-tifffile "fsspec>=2024.12.0"
 
       - name: Build and install (dev mode)
         run: |
@@ -78,10 +79,10 @@ jobs:
           source .venv/bin/activate
           python -c "from mermin._native import analyze_shape; print('mermin._native loaded')"
 
-      - name: Run smoke tests
+      - name: Run tests
         run: |
           source .venv/bin/activate
-          pytest tests/test_smoke.py -v --tb=short -x
+          pytest tests/ -v --tb=short -m "not corpus"
 
   wheel-smoke:
     name: Wheel smoke test

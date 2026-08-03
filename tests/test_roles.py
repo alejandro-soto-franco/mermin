@@ -106,3 +106,25 @@ def test_numeric_names_outside_the_plausible_window_are_not_wavelengths():
     # Bare channel indices as names must not be read as emission.
     with pytest.raises(UnresolvableRoleError):
         resolve_roles(["0.0", "1.0"], [])
+
+
+def test_a_pair_entirely_within_the_nuclear_band_raises():
+    # Both [470, 480] and [461, 477] sit entirely at or below NUCLEAR_MAX_NM
+    # (500), so the "fibre" candidate is a second nuclear stain, not a
+    # fibre. The emission guard must require the fibre side to sit above
+    # the nuclear bound too, not only the nuclear side to sit below it.
+    with pytest.raises(UnresolvableRoleError, match="did not resolve"):
+        resolve_roles(["Channel:0:0", "Channel:0:1"], [470.0, 480.0])
+    with pytest.raises(UnresolvableRoleError, match="did not resolve"):
+        resolve_roles(["Channel:0:0", "Channel:0:1"], [461.0, 477.0])
+
+
+def test_a_real_nuclear_fibre_pair_still_resolves():
+    # The real collaborator orderings must not regress from the two-sided
+    # guard: the fibre side sits comfortably above NUCLEAR_MAX_NM in both.
+    two = resolve_roles(["Channel:0:0", "Channel:0:1"], [470.0, 666.0])
+    assert (two["nuclear"].index, two["fibre"].index) == (0, 1)
+    three = resolve_roles(
+        ["Channel:0:0", "Channel:0:1", "Channel:0:2"], [525.0, 470.0, 666.0]
+    )
+    assert (three["nuclear"].index, three["fibre"].index) == (1, 2)

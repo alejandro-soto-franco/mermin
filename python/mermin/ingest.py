@@ -35,6 +35,7 @@ from pathlib import Path
 import numpy as np
 from bioio import BioImage
 
+from mermin.errors import MerminError
 from mermin.roles import RoleResolution, resolve_roles
 
 _EMISSION = re.compile(r'id="wavelength"[^>]*value="([\d.]+)"')
@@ -43,6 +44,27 @@ _CALIBRATION_STATE = re.compile(r'id="spatial-calibration-state"[^>]*value="([^"
 _CALIBRATION_UNITS = re.compile(r'id="spatial-calibration-units"[^>]*value="([^"]+)"')
 _MICRON_UNITS = {"micron", "microns", "um", "µm"}
 _TIFF_SUFFIXES = {".tif", ".tiff"}
+_ZARR_SUFFIXES = {".zarr"}
+
+# NGFF axis units this reader trusts as a physical length, and the factor
+# that converts one unit of that axis's scale into micrometres. An axis with
+# any other unit, or none at all, cannot be trusted: absent a unit, the NGFF
+# convention for "uncalibrated" is a scale of 1.0 with no unit declared, and
+# taking that literally is the same defect as the unset TIFF ResolutionUnit
+# above.
+_ZARR_UNIT_TO_UM = {
+    "micrometer": 1.0,
+    "micron": 1.0,
+    "um": 1.0,
+    "nanometer": 1e-3,
+    "nm": 1e-3,
+    "millimeter": 1e3,
+    "mm": 1e3,
+    "centimeter": 1e4,
+    "cm": 1e4,
+    "meter": 1e6,
+    "m": 1e6,
+}
 
 _LOWER_PERCENTILE = 1.0
 _UPPER_PERCENTILE = 99.5
@@ -50,7 +72,7 @@ _UPPER_PERCENTILE = 99.5
 _SUPPORTED_PROJECTIONS = {"single", "max", "mean"}
 
 
-class PixelSizeError(Exception):
+class PixelSizeError(MerminError):
     """No pixel size was supplied and none could be read from the file."""
 
 
@@ -133,10 +155,13 @@ def _pixel_size_um_from_tiff(path: Path) -> float | None:
 
 
 def _pixel_size_um_from_bioio(image: BioImage) -> float | None:
-    """Pixel size for non-TIFF formats, via bioio's own metadata.
+    """Pixel size for non-TIFF, non-Zarr formats, via bioio's own metadata.
 
     Not used for TIFFs: `bioio-tifffile` maps an unset `ResolutionUnit` to a
-    microns scalar of 1, so it can never report an uncalibrated TIFF.
+    microns scalar of 1, so it can never report an uncalibrated TIFF. Not
+    used for OME-Zarr either: bioio's `physical_pixel_sizes` there is the raw
+    NGFF `coordinateTransformations` scale, read without ever consulting the
+    axis's own declared unit; see `_pixel_size_um_from_ome_zarr`.
     """
     sizes = image.physical_pixel_sizes
     if sizes is None:
@@ -147,6 +172,92 @@ def _pixel_size_um_from_bioio(image: BioImage) -> float | None:
     return None
 
 
+def _ome_zarr_multiscales(path: Path) -> dict | None:
+    """The first scene's `multiscales` entry, read straight from the store.
+
+    NGFF v0.4 stores the entry under the group's top-level `multiscales`
+    attribute; v0.5 nests it under `ome`. Either way this is the store's own
+    metadata, not bioio's derived `physical_pixel_sizes`.
+    """
+    try:
+        import zarr
+    except ImportError:
+        return None
+    try:
+        group = zarr.open_group(store=str(path), mode="r")
+        attrs = group.attrs.asdict()
+    except Exception:
+        return None
+    multiscales = attrs.get("ome", {}).get("multiscales") or attrs.get("multiscales")
+    if not multiscales:
+        return None
+    return multiscales[0]
+
+
+def _axis_pixel_size_um(
+    axes: list[dict], scale: list[float], axis_name: str
+) -> float | None:
+    """One axis's scale converted to micrometres, or `None` if it cannot be
+    trusted: no matching axis, no scale entry at its position, no declared
+    unit, or a unit outside the recognised set. A missing unit is not a
+    missing conversion factor of 1; it means the axis is uncalibrated.
+    """
+    index = next(
+        (i for i, ax in enumerate(axes) if str(ax.get("name", "")).lower() == axis_name),
+        None,
+    )
+    if index is None or index >= len(scale):
+        return None
+    unit = str(axes[index].get("unit") or "").lower()
+    factor = _ZARR_UNIT_TO_UM.get(unit)
+    if factor is None:
+        return None
+    return float(scale[index]) * factor
+
+
+def _pixel_size_um_from_ome_zarr(path: Path) -> float | None:
+    """Pixel size in microns read directly from the store's own NGFF metadata.
+
+    `bioio_ome_zarr`'s `physical_pixel_sizes` is the raw `scale` entry of the
+    dataset's `coordinateTransformations`, taken at face value regardless of
+    what unit (or none) the corresponding axis declares. A store calibrated
+    in nanometres or millimetres comes back off by three orders of
+    magnitude, and an uncalibrated store, whose scale is conventionally 1.0
+    with no unit at all, comes back reading as "1.0 micron per pixel" rather
+    than "no calibration". Reading the `multiscales` metadata directly, and
+    only trusting a scale whose axis names a recognised unit, avoids both.
+    """
+    multiscales = _ome_zarr_multiscales(path)
+    if multiscales is None:
+        return None
+    axes = multiscales.get("axes") or []
+    datasets = multiscales.get("datasets") or []
+    if not axes or not datasets:
+        return None
+
+    transforms = datasets[0].get("coordinateTransformations") or []
+    scale = next((t.get("scale") for t in transforms if t.get("type") == "scale"), None)
+    if not scale:
+        return None
+
+    overall = next(
+        (
+            t.get("scale")
+            for t in (multiscales.get("coordinateTransformations") or [])
+            if t.get("type") == "scale"
+        ),
+        None,
+    )
+    if overall is not None and len(overall) == len(scale):
+        scale = [s * o for s, o in zip(scale, overall)]
+
+    for axis_name in ("x", "y"):
+        value = _axis_pixel_size_um(axes, scale, axis_name)
+        if value is not None:
+            return value
+    return None
+
+
 def _resolve_pixel_size_um(
     path: Path, image: BioImage, explicit: float | None
 ) -> float:
@@ -154,6 +265,8 @@ def _resolve_pixel_size_um(
         return float(explicit)
     if path.suffix.lower() in _TIFF_SUFFIXES:
         value = _pixel_size_um_from_tiff(path)
+    elif path.suffix.lower() in _ZARR_SUFFIXES:
+        value = _pixel_size_um_from_ome_zarr(path)
     else:
         value = _pixel_size_um_from_bioio(image)
     if value is None:

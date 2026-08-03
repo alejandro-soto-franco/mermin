@@ -12,6 +12,8 @@ import re
 import warnings
 from dataclasses import dataclass
 
+from mermin.errors import MerminError
+
 SYNTHETIC_NAME = re.compile(r"^Channel:\d+:\d+$")
 
 # Fluorescence emission sits within roughly this window. A numeric channel
@@ -31,7 +33,7 @@ FIBRE_TERMS = ("vimentin", "tubulin", "actin", "phalloidin", "lamin")
 NUCLEAR_MAX_NM = 500.0
 
 
-class RoleError(Exception):
+class RoleError(MerminError):
     """Channel roles could not be resolved."""
 
 
@@ -81,7 +83,11 @@ def _from_emission(values: list[float | None]) -> dict[str, RoleResolution] | No
         return None
     nuclear = min(present, key=lambda p: p[1])
     fibre = max(present, key=lambda p: p[1])
-    if nuclear[0] == fibre[0] or nuclear[1] > NUCLEAR_MAX_NM:
+    if (
+        nuclear[0] == fibre[0]
+        or nuclear[1] > NUCLEAR_MAX_NM
+        or fibre[1] <= NUCLEAR_MAX_NM
+    ):
         return None
     return {
         "nuclear": RoleResolution("nuclear", nuclear[0], "emission", f"{nuclear[1]} nm"),

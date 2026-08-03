@@ -126,6 +126,95 @@ def test_projection_with_no_z_axis_returns_the_plane_rather_than_raising(tmp_pat
     assert np.array_equal(maxp.planes["nuclear"], meanp.planes["nuclear"])
 
 
+def _write_ome_zarr(path, *, unit=None, scale=None, channels=("nuclear", "fibre")):
+    """A minimal two-channel NGFF v0.4 store, `CYX`, 8x8, all zero.
+
+    `unit` sets the X and Y axes' declared unit; omitting it leaves the axis
+    with no `unit` key at all, which is the NGFF convention for "this axis
+    is uncalibrated", not a missing conversion factor of 1. `scale` sets the
+    dataset's `coordinateTransformations` scale for X and Y; omitting it
+    omits the transform entirely, as an unwritten dataset would.
+    """
+    import zarr
+
+    data = np.zeros((len(channels), 8, 8), dtype=np.uint16)
+    group = zarr.open_group(store=str(path), mode="w", zarr_format=2)
+    arr = group.create_array("0", shape=data.shape, dtype=data.dtype, chunks=data.shape)
+    arr[:] = data
+
+    def _axis(name, kind):
+        axis = {"name": name, "type": kind}
+        if kind == "space" and unit is not None:
+            axis["unit"] = unit
+        return axis
+
+    axes = [_axis("c", "channel"), _axis("y", "space"), _axis("x", "space")]
+    dataset = {"path": "0"}
+    if scale is not None:
+        dataset["coordinateTransformations"] = [
+            {"type": "scale", "scale": [1.0, scale, scale]}
+        ]
+    multiscales = [{"axes": axes, "datasets": [dataset], "version": "0.4"}]
+    group.attrs["multiscales"] = multiscales
+    group.attrs["omero"] = {"channels": [{"label": c} for c in channels]}
+    return path
+
+
+@pytest.mark.parametrize(
+    "unit, scale",
+    [
+        ("micrometer", 0.69),
+        ("nanometer", 690.0),
+        ("millimeter", 0.00069),
+        ("centimeter", 0.000069),
+        ("meter", 0.00000069),
+    ],
+)
+def test_ome_zarr_pixel_size_converts_the_recognised_units(tmp_path, unit, scale):
+    # bioio's own `physical_pixel_sizes` returns the raw scale for OME-Zarr
+    # without ever consulting the axis's declared unit, so a store whose
+    # scale is expressed in anything other than micrometres would otherwise
+    # come back off by orders of magnitude.
+    p = _write_ome_zarr(tmp_path / f"{unit}.zarr", unit=unit, scale=scale)
+    img = open_image(p, channels={"nuclear": 0, "fibre": 1})
+    assert img.pixel_size_um == pytest.approx(0.69, rel=1e-6)
+
+
+@pytest.mark.parametrize("unit", ["micron", "um", "nm", "mm", "cm", "m"])
+def test_ome_zarr_pixel_size_accepts_the_unit_aliases(tmp_path, unit):
+    p = _write_ome_zarr(tmp_path / f"alias_{unit}.zarr", unit=unit, scale=1.0)
+    img = open_image(p, channels={"nuclear": 0, "fibre": 1})
+    assert img.pixel_size_um > 0.0
+
+
+def test_ome_zarr_uncalibrated_raises_rather_than_reporting_one(tmp_path):
+    # NGFF's own convention for "no calibration" is a scale of 1.0 with no
+    # unit declared on the axis. bioio's `physical_pixel_sizes` takes that
+    # scale at face value and reports 1.0 micron per pixel; this is the
+    # silent-guess defect I2 exists to close.
+    p = _write_ome_zarr(tmp_path / "uncal.zarr", unit=None, scale=1.0)
+    with pytest.raises(PixelSizeError, match="no pixel size"):
+        open_image(p, channels={"nuclear": 0, "fibre": 1})
+
+
+def test_ome_zarr_missing_transform_raises(tmp_path):
+    p = _write_ome_zarr(tmp_path / "no_transform.zarr", unit="micrometer", scale=None)
+    with pytest.raises(PixelSizeError, match="no pixel size"):
+        open_image(p, channels={"nuclear": 0, "fibre": 1})
+
+
+def test_ome_zarr_unrecognised_unit_raises(tmp_path):
+    p = _write_ome_zarr(tmp_path / "bogus_unit.zarr", unit="furlong", scale=0.69)
+    with pytest.raises(PixelSizeError, match="no pixel size"):
+        open_image(p, channels={"nuclear": 0, "fibre": 1})
+
+
+def test_ome_zarr_explicit_pixel_size_overrides_metadata(tmp_path):
+    p = _write_ome_zarr(tmp_path / "cal.zarr", unit="nanometer", scale=690.0)
+    img = open_image(p, channels={"nuclear": 0, "fibre": 1}, pixel_size_um=1.23)
+    assert img.pixel_size_um == pytest.approx(1.23)
+
+
 def test_emission_length_mismatch_warns_and_falls_through(tmp_path):
     p = tmp_path / "mismatch.tif"
     data = np.zeros((3, 16, 16), dtype=np.uint16)

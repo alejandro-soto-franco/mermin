@@ -12,7 +12,7 @@
 
 Named after [N. David Mermin](https://en.wikipedia.org/wiki/N._David_Mermin), whose 1979 *Reviews of Modern Physics* paper "The topological theory of defects in ordered media" provides the mathematical framework this tool implements on experimental microscopy data.
 
-mermin takes multi-channel fluorescence microscopy images (TIFF, OME-TIFF, OME-Zarr, and other formats [bioio](https://github.com/bioio-devs/bioio) supports) and produces a complete physical analysis of cell alignment: shape descriptors, orientational order parameters, topological defects, spatial statistics, and continuum theory parameter estimates. The nuclear and fibre channel roles are resolved from file metadata, or supplied explicitly.
+mermin takes multi-channel fluorescence microscopy images (TIFF, OME-TIFF, OME-Zarr, and other formats [bioio](https://github.com/bioio-devs/bioio) supports) and analyses cell alignment: per-cell shape descriptors, an orientation field with topological defect detection, an orientational correlation function, and Frank energy and Landau-de Gennes parameter estimates. The nuclear and fibre channel roles are resolved from file metadata, or supplied explicitly.
 
 ## Features
 
@@ -74,7 +74,7 @@ result = mermin.analyze(
 )
 
 print(result.summary())
-# mermin analysis: 847 cells, 12 defects, mean |psi_2| = 0.412, Frank ratio = 1.31
+# mermin analysis: 847 cells, 12 defects, Frank ratio = 1.31
 
 # Per-cell measurements as a polars DataFrame
 result.cells.head()
@@ -84,7 +84,8 @@ result.cells.head()
 # no calibration raises `mermin.ingest.PixelSizeError` naming the file.
 result = mermin.analyze("path/to/image.tif")
 
-# Batch experiment with condition comparison
+# Batch analysis across conditions. `report()` writes each image's summary
+# to a per-condition JSON file; it performs no statistical comparison.
 experiment = mermin.Experiment(pixel_size_um=0.69)
 experiment.add_condition("ctrl", ["d01.tif", "d02.tif", "d03.tif"])
 experiment.add_condition("tgfb1", ["d07.tif", "d08.tif", "d09.tif"])
@@ -168,11 +169,17 @@ TIFF, OME-TIFF, OME-Zarr (nuclear + fibre channels)
 theory measurements. Neighbour-graph construction (`build_neighbor_graph`),
 Poincar&eacute;--Hopf validation and persistent homology are implemented but not
 yet called from `analyze()`; `AnalysisResult.persistence` is always empty.
-Plotting and HTML report generation (`mermin.viz`) are not yet implemented.
+Of stage 6, `analyze()` calls only `orientational_correlation`: Ripley's $K$,
+block bootstrap and permutation tests are implemented in `mermin-stats` and
+exposed to Python, but `analyze()` does not call them yet. Of stage 7,
+`analyze()` calls only `frank_energy` and `estimate_ldg_params`: activity
+estimation is implemented in `mermin-theory` and exposed to Python, but
+`analyze()` does not call it yet. Plotting and HTML report generation
+(`mermin.viz`) are not yet implemented.
 
 ## Three Independent $k$-atic Measurements
 
-mermin extracts three independent orientational measurements per cell, each with distinct physical meaning:
+mermin's Rust crates compute three independent orientational measurements per cell, each with distinct physical meaning. In 0.4.0, `analyze()` does not yet assemble any of the three into its per-cell `cells` table: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, from which a caller can derive them directly.
 
 | Measurement | Source | What it captures |
 |-------------|--------|-----------------|
@@ -182,7 +189,7 @@ mermin extracts three independent orientational measurements per cell, each with
 
 Agreement or disagreement between these layers is itself diagnostic. A TGF-$\beta$-treated myofibroblast shows concordance across all three. A ROCK-inhibited cell may show a round shape (low shape $k{=}2$) but residual internal fibre alignment (higher internal $k{=}2$).
 
-Shape $k$-atic modes are computed per cell in `mermin-shape`. Internal and collective $k$-atic values are computed by `mermin-orient` and `mermin-stats` respectively, and are exposed to Python, but `analyze()`'s per-cell `cells` table does not yet carry any of the three: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, for a caller to derive them from directly.
+Shape $k$-atic modes are computed per cell in `mermin-shape`. Internal and collective $k$-atic values are computed by `mermin-orient` and `mermin-stats` respectively, and are exposed to Python.
 
 ## Performance
 

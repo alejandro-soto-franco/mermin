@@ -16,6 +16,10 @@ except PackageNotFoundError:
 __all__ = [
     "open_image",
     "PixelSizeError",
+    "MerminError",
+    "RoleError",
+    "AmbiguousRoleError",
+    "UnresolvableRoleError",
     "segment_nuclei",
     "segment_cell_bodies",
     "extract_contours",
@@ -29,6 +33,12 @@ def __getattr__(name: str):
     """Lazy import of submodules to avoid importing heavy dependencies unnecessarily."""
     if name == "open_image" or name == "PixelSizeError":
         from mermin.ingest import PixelSizeError, open_image
+        return locals()[name]
+    elif name == "MerminError":
+        from mermin.errors import MerminError
+        return MerminError
+    elif name in ("RoleError", "AmbiguousRoleError", "UnresolvableRoleError"):
+        from mermin.roles import AmbiguousRoleError, RoleError, UnresolvableRoleError
         return locals()[name]
     elif name in ("segment_nuclei", "segment_cell_bodies", "extract_contours", "build_neighbor_graph"):
         from mermin.segment import (
