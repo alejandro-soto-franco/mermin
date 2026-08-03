@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from mermin.io import load_tiff
+from mermin.ingest import open_image
 from mermin.segment import (
     build_neighbor_graph,
     extract_contours,
@@ -28,6 +28,7 @@ class AnalysisResult:
     frank: dict[str, float]
     ldg_params: dict[str, float]
     persistence: dict[str, Any]
+    ingest: dict[str, Any]
 
     def summary(self) -> str:
         n = len(self.cells)
@@ -46,8 +47,12 @@ class AnalysisResult:
 
 def analyze(
     path: str | Path,
+    *,
     channels: dict[str, int] | None = None,
-    pixel_size_um: float = 0.345,
+    pixel_size_um: float | None = None,
+    projection: str = "single",
+    z: int = 0,
+    t: int = 0,
     k_values: list[int] | None = None,
     structure_tensor_scales: list[float] | None = None,
     cellpose_diameter: float | None = None,
@@ -55,9 +60,14 @@ def analyze(
     """Run the full mermin analysis pipeline on a single image.
 
     Args:
-        path: Path to multi-frame TIFF.
-        channels: Channel mapping. Default: {"dapi": 0, "vimentin": 1}.
-        pixel_size_um: Physical pixel size in micrometers.
+        path: Path to a microscopy file.
+        channels: Explicit role mapping, for example {"nuclear": 0, "fibre": 1}.
+            Default: resolved from file metadata via `mermin.roles.resolve_roles`.
+        pixel_size_um: Physical pixel size in micrometers. Default: read from
+            file metadata; raises `mermin.ingest.PixelSizeError` if absent.
+        projection: Z projection policy ("single", "max", "mean").
+        z: Z index used when projection is "single".
+        t: Timepoint index.
         k_values: k-atic symmetry orders to analyze. Default: [1, 2, 4, 6].
         structure_tensor_scales: Gaussian sigma values in pixels.
             Default: [1, 2, 4, 8, 16, 32].
@@ -74,9 +84,17 @@ def analyze(
     from mermin import _native
 
     # Stage 1: Load and preprocess
-    images = load_tiff(path, channels)
-    dapi = images["dapi"]
-    vimentin = images["vimentin"]
+    loaded = open_image(
+        path,
+        channels=channels,
+        pixel_size_um=pixel_size_um,
+        projection=projection,
+        z=z,
+        t=t,
+    )
+    pixel_size_um = loaded.pixel_size_um
+    dapi = loaded.planes["nuclear"]
+    vimentin = loaded.planes["fibre"]
 
     # Stage 2: Segmentation
     nuclear_mask = segment_nuclei(dapi, diameter=cellpose_diameter)
@@ -184,6 +202,18 @@ def analyze(
         frank=frank,
         ldg_params=ldg,
         persistence=persistence,
+        ingest={
+            "roles": {
+                role: {
+                    "index": resolution.index,
+                    "mechanism": resolution.mechanism,
+                    "evidence": resolution.evidence,
+                }
+                for role, resolution in loaded.roles.items()
+            },
+            "pixel_size_um": loaded.pixel_size_um,
+            "projection": loaded.projection,
+        },
     )
 
 

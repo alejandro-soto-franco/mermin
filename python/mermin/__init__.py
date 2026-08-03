@@ -3,8 +3,8 @@
 __version__ = "0.1.0"
 
 __all__ = [
-    "load_tiff",
-    "discover_tiffs",
+    "open_image",
+    "PixelSizeError",
     "segment_nuclei",
     "segment_cell_bodies",
     "extract_contours",
@@ -14,8 +14,8 @@ __all__ = [
 
 def __getattr__(name: str):
     """Lazy import of submodules to avoid importing heavy dependencies unnecessarily."""
-    if name == "load_tiff" or name == "discover_tiffs":
-        from mermin.io import load_tiff, discover_tiffs
+    if name == "open_image" or name == "PixelSizeError":
+        from mermin.ingest import PixelSizeError, open_image
         return locals()[name]
     elif name in ("segment_nuclei", "segment_cell_bodies", "extract_contours", "build_neighbor_graph"):
         from mermin.segment import (
