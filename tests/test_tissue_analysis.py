@@ -4,6 +4,9 @@ import numpy as np
 import pytest
 from scipy.spatial import Delaunay
 
+pytest.importorskip(
+    "mermin._native", reason="mermin._native is not built in this checkout"
+)
 from mermin._native import (
     compute_cell_mean_coherence,
     compute_cell_orientations,

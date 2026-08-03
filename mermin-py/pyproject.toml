@@ -31,3 +31,6 @@ python-source = "../python"
 module-name = "mermin._native"
 features = ["pyo3/extension-module"]
 exclude = ["corpus/**", "docs/**", "numerical-tests/**", "mermin-tests/**"]
+
+[tool.pytest.ini_options]
+markers = ["corpus: requires the ASF-EX1 mermin-corpus volume mounted"]

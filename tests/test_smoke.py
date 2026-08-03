@@ -3,6 +3,10 @@
 import numpy as np
 import pytest
 
+pytest.importorskip(
+    "mermin._native", reason="mermin._native is not built in this checkout"
+)
+
 
 def test_shape_analysis_synthetic():
     """Test shape analysis on a synthetic hexagonal contour."""
