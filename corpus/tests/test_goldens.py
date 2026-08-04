@@ -396,11 +396,96 @@ class TestFieldQuadrants:
             coherence=coherence[::-1, ::-1],
             optimal_sigma=optimal_sigma[::-1, ::-1],
         )
+        # Whole-field aggregates are order-independent (a reversal is just a
+        # permutation of the same values), circular or not, so neither
+        # catches the reversal alone -- that is exactly why the quadrant
+        # breakdown exists.
         assert a["numerics"]["fields"]["theta_mean"] == b["numerics"]["fields"]["theta_mean"]
-        assert a["numerics"]["fields"]["theta_std"] == b["numerics"]["fields"]["theta_std"]
+        assert (
+            a["numerics"]["fields"]["theta_resultant_length"]
+            == b["numerics"]["fields"]["theta_resultant_length"]
+        )
         diffs = compare(a, b)
         paths = {d.path for d in diffs}
         assert any("_quadrants" in p for p in paths)
+
+
+class TestCircularStatistics:
+    """`theta`, `elongation_angle` and `nuclear_angle` are director/axis
+    angles identified modulo pi (confirmed from the Rust source: see the
+    module docstring). A plain arithmetic mean is not merely fragile for
+    such an angle, it is the wrong statistic: averaging a value just under
+    pi with a value just over 0 -- physically the same orientation --
+    produces something near pi/2. An all-declared-floors run surfaced
+    exactly this instability in `elongation_angle.mean`."""
+
+    def test_a_wrap_straddling_field_recovers_the_true_orientation(self):
+        """Two half-fields at 0.01 rad and pi - 0.01 rad are the same
+        physical orientation to within 0.02 rad. A plain mean of the raw
+        values reports ~pi/2 (physically nonsensical); the circular mean
+        must recover ~0 (equivalently ~pi), not ~pi/2."""
+        theta = np.full((8, 8), 0.01)
+        theta[4:, :] = math.pi - 0.01
+
+        plain_mean = float(theta.mean())
+        assert plain_mean == pytest.approx(math.pi / 2, abs=0.05)
+
+        r = record(theta=theta)
+        circular_mean = r["numerics"]["fields"]["theta_mean"]
+        # Wrapped into [0, pi): either just above 0 or just below pi are the
+        # same physical answer under the modulo-pi identification.
+        wrapped_distance_from_zero = min(circular_mean, math.pi - circular_mean)
+        assert wrapped_distance_from_zero < 0.05
+        assert abs(circular_mean - plain_mean) > 1.0
+
+    def test_a_uniform_field_has_resultant_length_one(self):
+        r = record(theta=np.full((8, 8), 1.0))
+        assert r["numerics"]["fields"]["theta_resultant_length"] == pytest.approx(1.0)
+
+    def test_a_uniformly_spread_field_has_a_small_resultant_length(self):
+        # Angles evenly spaced over exactly one modulo-pi period cancel
+        # perfectly in the doubled-angle sum.
+        theta = np.linspace(0.0, math.pi, num=64, endpoint=False).reshape(8, 8)
+        r = record(theta=theta)
+        assert r["numerics"]["fields"]["theta_resultant_length"] == pytest.approx(0.0, abs=1e-9)
+
+    def test_elongation_angle_column_uses_the_circular_mean(self):
+        """Same wrap-straddling construction as the field test, applied to a
+        `cells` column."""
+        mutated = fake_result(n_cells=4)
+        mutated.cells = mutated.cells.with_columns(
+            pl.Series("elongation_angle", [0.01, 0.01, math.pi - 0.01, math.pi - 0.01])
+        )
+        r = record_from(mutated)
+        summary = r["numerics"]["cells"]["elongation_angle"]
+        assert set(summary) == {"mean", "resultant_length"}
+        wrapped_distance_from_zero = min(summary["mean"], math.pi - summary["mean"])
+        assert wrapped_distance_from_zero < 0.05
+        assert summary["mean"] != pytest.approx(math.pi / 2, abs=0.1)
+
+    def test_nuclear_angle_column_uses_the_circular_mean(self):
+        mutated = fake_result(n_cells=4)
+        mutated.cells = mutated.cells.with_columns(
+            pl.Series("nuclear_angle", [0.01, 0.01, math.pi - 0.01, math.pi - 0.01])
+        )
+        r = record_from(mutated)
+        summary = r["numerics"]["cells"]["nuclear_angle"]
+        assert set(summary) == {"mean", "resultant_length"}
+        wrapped_distance_from_zero = min(summary["mean"], math.pi - summary["mean"])
+        assert wrapped_distance_from_zero < 0.05
+
+    def test_angular_columns_are_still_caught_by_compare(self):
+        """The reviewer's column-coverage attack, re-run specifically for
+        the two angular columns after their statistic changed shape (from
+        min/max/mean to mean/resultant_length): still caught."""
+        a = record(n_cells=5)
+        mutated = fake_result(n_cells=5)
+        mutated.cells = mutated.cells.with_columns(
+            (pl.col("elongation_angle") + 1.7).alias("elongation_angle")
+        )
+        b = record_from(mutated)
+        diffs = compare(a, b)
+        assert any(d.path.startswith("numerics.cells.elongation_angle.") for d in diffs)
 
 
 class TestDefectCharges:

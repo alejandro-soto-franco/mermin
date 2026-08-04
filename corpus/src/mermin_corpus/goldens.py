@@ -2,29 +2,57 @@
 
 This module never imports `mermin`. It reads an `AnalysisResult` by attribute,
 so a golden can be built and compared without the analysis package installed,
-and so the corpus tooling stays independent of the code it measures.
+and so the corpus tooling stays independent of the code it measures. It does
+import `numpy`, already a declared dependency of `mermin-corpus` itself (see
+`corpus/pyproject.toml`) and, transitively, of `mermin` (a per-pixel field is
+a numpy array), so this costs nothing new: the circular statistics below
+need vectorised trigonometric ufuncs, and a pure-Python loop over a
+4015x4015 field would cost tens of seconds it does not need to.
 
 `numerics.fields` summarises `theta`, `coherence` and `optimal_sigma` with a
-mean, a standard deviation and a mean over each of the field's four spatial
-quadrants (`_quadrant_means`). A per-quadrant mean was chosen over two other
+mean, a dispersion statistic and a statistic over each of the field's four
+spatial quadrants. A per-quadrant statistic was chosen over two other
 options considered: a hash of the raw array is exact and would catch any
 rearrangement, but a hash tells a reader nothing about what moved and is
 brittle to last-bit floating-point noise, which this module otherwise treats
 as absorbed rather than as a defect (see `TIGHT`/`LOOSE` below); dumping the
 full field is exact and legible but unreadable as a diff and would bloat the
 golden by orders of magnitude on the corpus's largest entry (4015x4015).
-Quadrant means are cheap, round-trip through JSON as four ordinary floats,
-and localise a change to a quarter of the image in a diff a person can read.
-They also close a real gap: a full spatial reversal (`field[::-1, ::-1]`)
-leaves the whole-field mean and standard deviation unchanged but swaps
-opposite quadrants, so unless two opposite quadrant means coincide exactly,
-the reversal now surfaces as a difference.
+Quadrant statistics are cheap, round-trip through JSON as four ordinary
+floats, and localise a change to a quarter of the image in a diff a person
+can read. They also close a real gap: a full spatial reversal
+(`field[::-1, ::-1]`) leaves the whole-field mean and dispersion unchanged
+but swaps opposite quadrants, so unless two opposite quadrants coincide
+exactly, the reversal now surfaces as a difference.
+
+`theta` is a director angle identified modulo pi, not an ordinary linear
+quantity (`mermin-orient/src/structure_tensor.rs` wraps it into `[0, pi)`;
+so do `mermin-shape/src/minkowski.rs`'s `elongation_angle` and
+`mermin-orient/src/cell_orientation.rs`'s `nuclear_angle`, both orientations
+of an axis that is only defined up to sign). An arithmetic mean of such an
+angle is not merely fragile, it is the wrong statistic: averaging a value
+just under pi with a value just over 0 -- physically the same orientation
+-- produces something near pi/2. `_circular_mean_and_resultant` uses the
+convention this project already establishes elsewhere
+(`cell_orientations` in `cell_orientation.rs`, and
+`tests/test_phantom_closed_form.py`'s `test_uniform_director_recovers_the_
+known_angle`): double the angle before averaging as a unit complex number,
+then halve the mean's argument back, `0.5 * angle(mean(exp(2j * theta)))`.
+Doubling maps the pi-periodic identification onto an ordinary
+2*pi-periodic one where an average is well-defined; halving maps back. Its
+companion, the resultant length `abs(mean(exp(2j * theta)))`, replaces a
+standard deviation for these quantities: 1.0 for a perfectly concentrated
+angle, 0.0 for a uniformly spread one. This is used, not a purpose-built
+circular standard deviation, for the same reason: one convention across the
+project is worth more than a marginally more familiar number.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
 import math
+
+import numpy as np
 
 SCHEMA_VERSION = "1"
 
@@ -60,6 +88,33 @@ SCHEMA_VERSION = "1"
 # measured on idr0062 and montano in the phase 4 corpus survey) while
 # remaining far tighter than any real change measured here, so it no longer
 # blinds the goldens to a change the way `1e-3` did.
+#
+# An all-declared-floors run against this `1e-6` surfaced one field at
+# 1.652809e-06, just outside it: `montano-hvf-2026-04`'s
+# `numerics.cells.elongation_angle.mean`, ten orders of magnitude above
+# every other field's floors-run delta (1e-15 to 1e-16, machine epsilon).
+# Part of that was a wrong statistic rather than noise for `LOOSE` to
+# absorb: a plain arithmetic mean of a modulo-pi angle jumps when a cell's
+# angle crosses the wrap point, so `_circular_mean_and_resultant` replaced
+# it for every angular quantity here (`theta`, `elongation_angle`,
+# `nuclear_angle`). That collapsed seven of the eight entries to 1e-14 or
+# below.
+#
+# It did not fix `montano-hvf-2026-04`, and the residual is worth stating
+# rather than quietly absorbing. That entry's angular aggregates still move
+# at all-floors, by 7.2e-6 on the mean and 5.1e-6 on the resultant length,
+# which is larger than the pre-fix figure rather than smaller. The cause is
+# conditioning rather than the formula: its 1495 cells have a resultant
+# length of 0.22, meaning almost no preferred orientation, and the direction
+# of a circular mean is poorly determined when the resultant is small. A
+# summary that is barely defined cannot be pinned tightly, and no choice of
+# tolerance makes it well defined.
+#
+# So `LOOSE` stays at `1e-6`, and that one entry's angular aggregates are
+# expected to differ on a dependency set other than the one its golden
+# records in `environment`. Loosening to `1e-5` to cover it would blind
+# every other field, all of which reproduce to 1e-14, to a change ten
+# thousand times larger than any they exhibit.
 TIGHT = 1e-12
 LOOSE = 1e-6
 
@@ -72,6 +127,18 @@ LOOSE = 1e-6
 # column list, so a new numeric column added to the pipeline is captured the
 # moment it appears rather than needing this module taught its name.
 _CELL_IDENTIFIER_COLUMNS = frozenset({"label"})
+
+# `cells` columns holding an orientation angle identified modulo pi, not an
+# ordinary linear quantity: confirmed from the Rust source, not assumed.
+# `elongation_from_w1_tensor` (`mermin-shape/src/minkowski.rs`) documents
+# `elongation_angle` as "orientation of major axis in `[0, pi)` radians" and
+# wraps it there explicitly; `fit_nuclear_ellipse`
+# (`mermin-orient/src/cell_orientation.rs`) documents `nuclear_angle`
+# identically and wraps it the same way. Both are eigenvector/ellipse-axis
+# orientations with no preferred sign, the same identification `theta`
+# carries (see the module docstring), so both are summarised with
+# `_circular_summarise` rather than `_summarise`.
+_CELL_ANGULAR_COLUMNS = frozenset({"elongation_angle", "nuclear_angle"})
 
 
 @dataclass(frozen=True)
@@ -91,32 +158,76 @@ class Difference:
         )
 
 
-def _quadrant_means(field: Any) -> dict[str, float]:
-    """Mean of each of a 2D field's four spatial quadrants.
+def _circular_mean_and_resultant(values: Any) -> tuple[float, float]:
+    """Circular mean and resultant length of an angle identified modulo pi.
 
-    See the module docstring for why quadrant means and not a hash or a full
-    dump. Integer floor division splits an odd dimension so every pixel
-    lands in exactly one quadrant; that is a deterministic, reproducible
-    split, not a design requirement of the four sizes matching.
+    See the module docstring for the doubling convention and why it is
+    correct here (`theta`, `elongation_angle`, `nuclear_angle`). `values`
+    must be non-empty; callers with a possibly-empty column or field handle
+    that themselves; e.g. `_circular_summarise` short-circuits before this
+    is called. The mean is wrapped into `[0, pi)` via Python's `%`, matching
+    the domain every angular quantity is already stored in on the Rust
+    side, so a golden's circular mean is directly comparable to the raw
+    field or column it summarises.
+    """
+    z = complex(np.mean(np.exp(2j * np.asarray(values, dtype=np.float64))))
+    mean = (0.5 * math.atan2(z.imag, z.real)) % math.pi
+    resultant_length = abs(z)
+    return float(mean), float(resultant_length)
+
+
+def _quadrant_slices(field: Any) -> dict[str, Any]:
+    """A 2D field's four spatial quadrants as array slices.
+
+    Integer floor division splits an odd dimension so every pixel lands in
+    exactly one quadrant; that is a deterministic, reproducible split, not
+    a design requirement of the four sizes matching.
     """
     ny, nx = field.shape
     my, mx = ny // 2, nx // 2
     return {
-        "top_left": float(field[:my, :mx].mean()),
-        "top_right": float(field[:my, mx:].mean()),
-        "bottom_left": float(field[my:, :mx].mean()),
-        "bottom_right": float(field[my:, mx:].mean()),
+        "top_left": field[:my, :mx],
+        "top_right": field[:my, mx:],
+        "bottom_left": field[my:, :mx],
+        "bottom_right": field[my:, mx:],
+    }
+
+
+def _quadrant_means(field: Any) -> dict[str, float]:
+    """Linear mean of each of a 2D field's four spatial quadrants.
+
+    For `coherence` and `optimal_sigma` only: ordinary linear quantities.
+    `theta`, identified modulo pi, needs `_circular_quadrant_means` instead,
+    or the same wrap-around error the module docstring describes for the
+    whole field shows up per quadrant. See the module docstring for why a
+    quadrant statistic at all, rather than a hash or a full dump.
+    """
+    return {name: float(sub.mean()) for name, sub in _quadrant_slices(field).items()}
+
+
+def _circular_quadrant_means(field: Any) -> dict[str, float]:
+    """Circular mean (`_circular_mean_and_resultant`) of each of a 2D
+    field's four spatial quadrants, for an angle identified modulo pi
+    (`theta`)."""
+    return {
+        name: _circular_mean_and_resultant(sub.ravel())[0]
+        for name, sub in _quadrant_slices(field).items()
     }
 
 
 def _summarise(frame, column: str) -> dict[str, float] | None:
-    """Min/max/mean of a column, or `None` for an empty frame.
+    """Min/max/mean of a linear column, or `None` for an empty frame.
 
     `polars.Series.min()` on an empty column returns `None`, not an empty
     aggregate, so `float(None)` would crash uninformatively on a corpus tile
     whose segmentation found nothing. `None` is returned explicitly instead,
     and `compare` treats it like any other value: two zero-cell records
     compare equal, a zero-cell record against a populated one differs.
+
+    For an angular column (`_CELL_ANGULAR_COLUMNS`), use
+    `_circular_summarise` instead: min/max/mean of a modulo-pi angle are
+    not meaningful statistics, only the least unstable ones, and this
+    module now has the correct ones available.
     """
     if frame.height == 0:
         return None
@@ -126,6 +237,20 @@ def _summarise(frame, column: str) -> dict[str, float] | None:
         "max": float(series.max()),
         "mean": float(series.mean()),
     }
+
+
+def _circular_summarise(frame, column: str) -> dict[str, float] | None:
+    """Circular mean and resultant length of a `cells` column holding an
+    angle identified modulo pi (`elongation_angle`, `nuclear_angle`), in
+    place of the linear min/max/mean `_summarise` uses for every other
+    column. `None` for an empty frame, for the same reason `_summarise`
+    returns `None`: there is no aggregate of nothing, and `compare` treats
+    `None` uniformly regardless of which function produced it.
+    """
+    if frame.height == 0:
+        return None
+    mean, resultant_length = _circular_mean_and_resultant(frame[column].to_numpy())
+    return {"mean": mean, "resultant_length": resultant_length}
 
 
 def build_record(
@@ -140,11 +265,18 @@ def build_record(
     coherence = result.fields["coherence"]
     optimal_sigma = result.fields["optimal_sigma"]
 
+    # Computed once, not inline twice: `theta` is up to 4015x4015 (montano),
+    # and `_circular_mean_and_resultant` does a full pass over it.
+    theta_mean, theta_resultant_length = _circular_mean_and_resultant(theta.ravel())
+
     cells: dict[str, Any] = {}
     for column in result.cells.columns:
         if column in _CELL_IDENTIFIER_COLUMNS:
             continue
-        cells[column] = _summarise(result.cells, column)
+        if column in _CELL_ANGULAR_COLUMNS:
+            cells[column] = _circular_summarise(result.cells, column)
+        else:
+            cells[column] = _summarise(result.cells, column)
 
     r_bins = result.correlations.get("r_bins", [])
     g_values = result.correlations.get("g_values", [])
@@ -214,9 +346,17 @@ def build_record(
                 # quadrant means close that gap; see the module docstring
                 # for why quadrant means rather than a hash or a full dump.
                 "optimal_sigma_quadrants": _quadrant_means(optimal_sigma),
-                "theta_mean": float(theta.mean()),
-                "theta_std": float(theta.std()),
-                "theta_quadrants": _quadrant_means(theta),
+                # `theta` is a director angle identified modulo pi (see the
+                # module docstring), so its mean and dispersion use
+                # `_circular_mean_and_resultant` rather than `theta.mean()`/
+                # `theta.std()`: a plain arithmetic mean is not merely
+                # fragile for this quantity, it is the wrong statistic, and
+                # `theta_resultant_length` (1.0 concentrated, 0.0 spread)
+                # replaces a standard deviation rather than inventing a
+                # circular one.
+                "theta_mean": theta_mean,
+                "theta_resultant_length": theta_resultant_length,
+                "theta_quadrants": _circular_quadrant_means(theta),
                 "coherence_mean": float(coherence.mean()),
                 "coherence_std": float(coherence.std()),
                 "coherence_quadrants": _quadrant_means(coherence),
