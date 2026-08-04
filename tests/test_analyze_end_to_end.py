@@ -68,6 +68,72 @@ def _write_synthetic_two_channel_tif(path):
     return path
 
 
+def _write_readme_quickstart_tif(path):
+    """Two-channel synthetic tif carrying both wavelength labels and pixel
+    size metadata, so it needs neither `channels` nor `pixel_size_um`: the
+    plain call the README's Quick Start documents, `mermin.analyze(path)`
+    with no other keyword argument.
+
+    A bare `tifffile.imwrite(path, np.stack([nuclear, fibre]))` with no axes
+    metadata, which is what the README implied before this fix, reads back
+    through bioio as one channel with a Z extent of two, not two channels.
+    `imagej=True` with `metadata={"axes": "CYX"}` is what makes it genuinely
+    two-channel, as the rest of this file already does.
+    """
+    h, w = 96, 96
+    nuclear = np.zeros((h, w), dtype=np.uint16)
+    rng = np.random.default_rng(0)
+    centres = [
+        (20, 20), (20, 50), (20, 80),
+        (70, 20), (70, 50), (70, 80),
+    ]
+    for cy, cx in centres:
+        yy, xx = np.ogrid[:h, :w]
+        disc = (yy - cy) ** 2 + (xx - cx) ** 2 <= 8**2
+        nuclear[disc] = 4000 + rng.integers(0, 200)
+    nuclear += rng.integers(0, 50, size=(h, w)).astype(np.uint16)
+
+    x = np.arange(w)
+    fibre = np.tile(np.sin(2 * np.pi * x / 12) * 2000 + 2000, (h, 1)).astype(
+        np.uint16
+    )
+
+    data = np.stack([nuclear, fibre], axis=0)
+    labels = [
+        '<MetaData><PlaneInfo><prop id="wavelength" type="float" value="405"/>'
+        "</PlaneInfo></MetaData>",
+        '<MetaData><PlaneInfo><prop id="wavelength" type="float" value="568"/>'
+        "</PlaneInfo></MetaData>",
+    ]
+    tifffile.imwrite(
+        path,
+        data,
+        imagej=True,
+        metadata={"axes": "CYX", "Labels": labels, "unit": "micron"},
+        resolution=(1 / 0.25, 1 / 0.25),
+    )
+    return path
+
+
+def test_analyze_runs_from_the_readme_quick_start_call(tmp_path):
+    """`mermin.analyze(path)` with no other keyword argument is the first
+    call the README's Quick Start shows. Nothing else in the suite calls
+    `analyze()` this way: `test_analyze_runs_end_to_end_on_a_synthetic_image`
+    below passes `pixel_size_um` and `segmentation`, and the corpus
+    end-to-end test passes `segmentation`. Roles and pixel size must both
+    resolve from the file's own metadata, and `segmentation="auto"` must
+    complete on whichever backend this environment has.
+    """
+    path = _write_readme_quickstart_tif(tmp_path / "quickstart.tif")
+
+    result = analyze(path)
+
+    assert result.ingest["pixel_size_um"] == pytest.approx(0.25)
+    assert result.ingest["roles"]["nuclear"]["mechanism"] == "emission"
+    assert result.segmentation["backend"] in ("threshold", "cellpose")
+    assert len(result.cells) >= 6
+
+
 def test_analyze_runs_end_to_end_on_a_synthetic_image(tmp_path):
     path = _write_synthetic_two_channel_tif(tmp_path / "synthetic.tif")
 
