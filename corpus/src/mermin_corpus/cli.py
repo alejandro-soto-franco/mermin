@@ -7,6 +7,11 @@ import sys
 from .errors import CorpusError
 from .fetch import fetch_entry
 from .generate import GOLDEN_ENTRIES, check_entry, generate_entry
+from .hermetic import (
+    HERMETIC_ENTRIES,
+    check_hermetic_entry,
+    generate_hermetic_entry,
+)
 from .manifest import Manifest, load
 from .probe import probe_entry
 
@@ -62,6 +67,45 @@ def _goldens(args: argparse.Namespace) -> int:
     return 0
 
 
+def _hermetic_goldens(args: argparse.Namespace) -> int:
+    """The hermetic sibling of `_goldens`: no manifest, no drive, no
+    `tomlkit` past what `main`'s own module-level imports already require.
+    A separate subcommand rather than folded into `goldens` itself, because
+    `_goldens` unconditionally calls `load()` and looks every entry up in the
+    mounted manifest, neither of which a phantom generated in process has.
+    Kept in the same `mermin-corpus` tool as `goldens` so regenerating both
+    families is one command away from the other, rather than a second,
+    undiscoverable script -- the reason this exists at all."""
+    selected = [args.entry] if args.entry else sorted(HERMETIC_ENTRIES)
+    failed: list[str] = []
+    for entry_id in selected:
+        try:
+            if args.check:
+                diffs = check_hermetic_entry(entry_id)
+                real = [d for d in diffs if d.kind != "environment"]
+                environment = [d for d in diffs if d.kind == "environment"]
+                if real:
+                    failed.append(entry_id)
+                    print(f"FAILED  {entry_id}: {len(real)} difference(s)", file=sys.stderr)
+                    for d in real:
+                        print(f"  {d}", file=sys.stderr)
+                else:
+                    print(f"ok      {entry_id}")
+                    for d in environment:
+                        print(f"  {d}")
+            else:
+                path = generate_hermetic_entry(entry_id)
+                print(f"wrote   {entry_id} -> {path}")
+        except CorpusError as exc:
+            failed.append(entry_id)
+            print(f"FAILED  {entry_id}: {exc}", file=sys.stderr)
+
+    if failed:
+        print(f"{len(failed)} of {len(selected)} entries failed: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mermin-corpus")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -80,10 +124,17 @@ def main(argv: list[str] | None = None) -> int:
     goldens_parser.add_argument("--entry")
     goldens_parser.add_argument("--check", action="store_true")
 
+    hermetic_parser = sub.add_parser("hermetic-goldens")
+    hermetic_parser.add_argument("--entry")
+    hermetic_parser.add_argument("--check", action="store_true")
+
     args = parser.parse_args(argv)
 
     if args.command == "goldens":
         return _goldens(args)
+
+    if args.command == "hermetic-goldens":
+        return _hermetic_goldens(args)
 
     try:
         manifest = load()
