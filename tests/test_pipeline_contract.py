@@ -110,7 +110,9 @@ def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
     """`Experiment.run()` used to call `analyze(p, pixel_size_um=...)` and
     stop, so a file needing an explicit channel mapping, or a non-default
     Z/T selection, was unreachable from the batch API. Assert every one of
-    the four fields actually reaches `analyze` for every path in the batch.
+    the six fields actually reaches `analyze` for every path in the batch,
+    including `segmentation` and `mask_cache`: `run()` passes both, and
+    nothing checked it, so deleting either line still left the suite green.
     """
     import mermin.pipeline as pipeline_module
 
@@ -128,6 +130,8 @@ def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
         projection="max",
         z=2,
         t=1,
+        segmentation="threshold",
+        mask_cache="/tmp/mask-cache",
     )
     experiment.add_condition("ctrl", ["a.tif", "b.tif"])
     experiment.run()
@@ -139,6 +143,8 @@ def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
         assert kwargs["projection"] == "max"
         assert kwargs["z"] == 2
         assert kwargs["t"] == 1
+        assert kwargs["segmentation"] == "threshold"
+        assert kwargs["mask_cache"] == "/tmp/mask-cache"
 
 
 def test_analyze_and_experiment_reachable_from_package_root():
