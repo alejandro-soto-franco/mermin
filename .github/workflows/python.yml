@@ -23,6 +23,7 @@ on:
       - 'mermin-stats/**'
       - 'mermin-theory/**'
       - 'python/**'
+      - '.github/workflows/python.yml'
 
 env:
   CARGO_TERM_COLOR: always
@@ -97,7 +98,7 @@ jobs:
         run: |
           source mermin-py/.venv/bin/activate
           python -c "import mermin; from mermin._native import analyze_shape; print('mermin', mermin.__version__, 'built and imported at the lowest declared floors')"
-          pytest tests/test_ingest.py tests/test_analyze_end_to_end.py tests/test_smoke.py -v --tb=short -m "not corpus"
+          pytest tests/ -v --tb=short -m "not corpus"
 
   rust-check:
     name: Rust compile check (mermin-py)
