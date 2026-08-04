@@ -139,3 +139,29 @@ class TestCompare:
         diffs = compare(record(n_cells=3), record(n_cells=4))
         d = next(d for d in diffs if d.path == "counts.cells")
         assert (d.golden, d.current) == (3, 4)
+
+    def test_an_extra_top_level_section_is_a_difference(self):
+        """A section `build_record` gains later must be unprotected for zero
+        commits, not until someone remembers to teach `compare` about it."""
+        a = record()
+        b = record()
+        b["extra_section"] = {"foo": "bar"}
+        diffs = compare(a, b)
+        assert any(d.path == "extra_section" for d in diffs)
+
+    def test_a_missing_top_level_section_is_a_difference(self):
+        a = record()
+        b = record()
+        del b["segmentation"]
+        diffs = compare(a, b)
+        assert any(d.path == "segmentation" for d in diffs)
+
+    def test_a_count_as_a_float_is_a_difference_even_when_numerically_equal(self):
+        """`counts` is exact-compared, and Python's `3 == 3.0`, so without a
+        type check a regressed `int()` cast in `build_record` would pass
+        silently."""
+        a = record()
+        b = record()
+        b["counts"]["cells"] = float(b["counts"]["cells"])
+        diffs = compare(a, b)
+        assert any(d.path == "counts.cells" for d in diffs)

@@ -153,6 +153,20 @@ def _walk(golden: Any, current: Any, path: str, kind: str, tolerance: float | No
         out.append(Difference(path, golden, current, kind, tolerance))
         return
     if tolerance is None:
+        # An exact comparison also rejects a numeric type change even when the
+        # values are equal by value (3 == 3.0): a golden's `int()` cast
+        # regressing to a float is a schema defect, and JSON round-trips int
+        # and float distinctly, so this costs nothing to check. The tolerance
+        # path below is untouched: comparing an int to a float there is
+        # legitimate, since both sides are cast through `float()`.
+        if (
+            kind == "exact"
+            and isinstance(golden, (int, float))
+            and isinstance(current, (int, float))
+            and type(golden) is not type(current)
+        ):
+            out.append(Difference(path, golden, current, kind, None))
+            return
         if golden != current:
             out.append(Difference(path, golden, current, kind, None))
         return
@@ -172,12 +186,24 @@ _NUMERIC_TOLERANCE = {
 }
 
 
+_KNOWN_SECTIONS = {
+    "environment", "numerics", "schema_version", "entry", "invocation",
+    "ingest", "segmentation", "counts",
+}
+
+
 def compare(golden: dict[str, Any], current: dict[str, Any]) -> list[Difference]:
     """Every way `current` differs from `golden`.
 
     An `environment` difference is reported with kind `environment` so a caller
     can note it without failing: a recorded dependency version explains a
     difference elsewhere, it is not one itself.
+
+    The top-level keys of both records are unioned, the same principle already
+    applied inside `numerics`: a section neither known to this function nor
+    present in the other record is a difference in its own right, so a section
+    added to `build_record` without being taught to `compare` fails loudly
+    rather than going unchecked from the moment it exists.
     """
     out: list[Difference] = []
 
@@ -200,4 +226,9 @@ def compare(golden: dict[str, Any], current: dict[str, Any]) -> list[Difference]
             _NUMERIC_TOLERANCE.get(branch),
             out,
         )
+
+    for key in sorted((set(golden) | set(current)) - _KNOWN_SECTIONS):
+        _walk(golden.get(key, _MISSING), current.get(key, _MISSING),
+              key, "exact", None, out)
+
     return out
