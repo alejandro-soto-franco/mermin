@@ -47,7 +47,17 @@ class Difference:
         )
 
 
-def _summarise(frame, column: str) -> dict[str, float]:
+def _summarise(frame, column: str) -> dict[str, float] | None:
+    """Min/max/mean of a column, or `None` for an empty frame.
+
+    `polars.Series.min()` on an empty column returns `None`, not an empty
+    aggregate, so `float(None)` would crash uninformatively on a corpus tile
+    whose segmentation found nothing. `None` is returned explicitly instead,
+    and `compare` treats it like any other value: two zero-cell records
+    compare equal, a zero-cell record against a populated one differs.
+    """
+    if frame.height == 0:
+        return None
     series = frame[column]
     return {
         "min": float(series.min()),
@@ -72,9 +82,18 @@ def build_record(
         if column in result.cells.columns:
             cells[column] = _summarise(result.cells, column)
 
+    r_bins = result.correlations.get("r_bins", [])
+    g_values = result.correlations.get("g_values", [])
+
     return {
         "schema_version": SCHEMA_VERSION,
         "entry": entry,
+        # The column set of `cells`, not its summarised contents: if a column
+        # disappears from the pipeline's output on both sides, no golden built
+        # from _CELL_COLUMNS alone would ever notice. This is an unrecognised
+        # top-level section as far as `compare` is concerned, so it is already
+        # compared exactly with no comparator change required.
+        "schema": sorted(result.cells.columns),
         "environment": dict(environment),
         "invocation": dict(invocation),
         "ingest": {
@@ -108,7 +127,21 @@ def build_record(
             },
             "correlations": {
                 "correlation_length": float(result.correlations["correlation_length"]),
-                "n_bins": len(result.correlations.get("r_bins", [])),
+                "n_bins": len(r_bins),
+                # The curve itself, not only its length: `n_bins` and
+                # `correlation_length` can both hold steady while `G_k(r)`
+                # changes shape. `analyze()` takes the `len(labels) < 3`
+                # fallback with both lists empty, in which case these are
+                # `None` rather than an aggregate of nothing.
+                "g_values": {
+                    "min": float(min(g_values)),
+                    "max": float(max(g_values)),
+                    "mean": float(sum(g_values) / len(g_values)),
+                } if g_values else None,
+                "r_bins": {
+                    "first": float(r_bins[0]),
+                    "last": float(r_bins[-1]),
+                } if r_bins else None,
             },
             "ldg_params": {k: float(v) for k, v in result.ldg_params.items()},
             "cells": cells,
@@ -217,15 +250,22 @@ def compare(golden: dict[str, Any], current: dict[str, Any]) -> list[Difference]
 
     g_num = golden.get("numerics", {})
     c_num = current.get("numerics", {})
-    for branch in sorted(set(g_num) | set(c_num)):
-        _walk(
-            g_num.get(branch, _MISSING),
-            c_num.get(branch, _MISSING),
-            f"numerics.{branch}",
-            "tolerance",
-            _NUMERIC_TOLERANCE.get(branch),
-            out,
-        )
+    if isinstance(g_num, dict) and isinstance(c_num, dict):
+        for branch in sorted(set(g_num) | set(c_num)):
+            _walk(
+                g_num.get(branch, _MISSING),
+                c_num.get(branch, _MISSING),
+                f"numerics.{branch}",
+                "tolerance",
+                _NUMERIC_TOLERANCE.get(branch),
+                out,
+            )
+    else:
+        # A malformed record (`numerics` not a mapping, e.g. `None`) would
+        # otherwise crash `set(g_num)` with an uninformative TypeError. Every
+        # other type mismatch in this module produces a clean `Difference`;
+        # this one should too.
+        _walk(g_num, c_num, "numerics", "exact", None, out)
 
     for key in sorted((set(golden) | set(current)) - _KNOWN_SECTIONS):
         _walk(golden.get(key, _MISSING), current.get(key, _MISSING),

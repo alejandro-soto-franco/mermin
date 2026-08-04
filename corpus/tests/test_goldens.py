@@ -16,7 +16,8 @@ from mermin_corpus.goldens import (
 )
 
 
-def fake_result(*, n_cells=3, area_mean=10.0, splay=1.25, corr_len=4.0):
+def fake_result(*, n_cells=3, area_mean=10.0, splay=1.25, corr_len=4.0,
+                 r_bins=(1.0,), g_values=(0.9,)):
     cells = pl.DataFrame(
         {
             "label": list(range(1, n_cells + 1)),
@@ -24,7 +25,14 @@ def fake_result(*, n_cells=3, area_mean=10.0, splay=1.25, corr_len=4.0):
             "perimeter": [12.0] * n_cells,
             "shape_index": [3.8] * n_cells,
             "elongation": [0.4] * n_cells,
-        }
+        },
+        schema={
+            "label": pl.Int64,
+            "area": pl.Float64,
+            "perimeter": pl.Float64,
+            "shape_index": pl.Float64,
+            "elongation": pl.Float64,
+        },
     )
     return SimpleNamespace(
         cells=cells,
@@ -34,7 +42,7 @@ def fake_result(*, n_cells=3, area_mean=10.0, splay=1.25, corr_len=4.0):
             "optimal_sigma": 2.0,
         },
         defects=[{"position": (1, 1), "charge": 0.5, "angle": 0.0}],
-        correlations={"correlation_length": corr_len, "r_bins": [1.0], "g_values": [0.9]},
+        correlations={"correlation_length": corr_len, "r_bins": list(r_bins), "g_values": list(g_values)},
         frank={"splay": splay, "bend": 0.75, "ratio": 1.5},
         ldg_params={"a": 1.0, "b": 2.0, "c": 3.0, "k_elastic": 4.0},
         ingest={
@@ -165,3 +173,91 @@ class TestCompare:
         b["counts"]["cells"] = float(b["counts"]["cells"])
         diffs = compare(a, b)
         assert any(d.path == "counts.cells" for d in diffs)
+
+
+class TestZeroCells:
+    """A segmentation that finds nothing is a plausible real input, not a
+    malformed record: `build_record` must not crash on it."""
+
+    def test_build_record_does_not_crash_on_zero_cells(self):
+        r = record(n_cells=0)
+        assert r["counts"]["cells"] == 0
+        assert r["numerics"]["cells"]["area"] is None
+
+    def test_two_zero_cell_records_compare_equal(self):
+        assert compare(record(n_cells=0), record(n_cells=0)) == []
+
+    def test_a_zero_cell_record_differs_from_a_populated_one(self):
+        diffs = compare(record(n_cells=0), record(n_cells=3))
+        assert any(d.path == "numerics.cells.area" for d in diffs)
+
+
+class TestMalformedNumerics:
+    def test_a_numerics_section_that_is_not_a_mapping_is_a_difference_not_a_crash(self):
+        a = record()
+        b = record()
+        b["numerics"] = None
+        diffs = compare(a, b)
+        assert any(d.path == "numerics" for d in diffs)
+        assert all(d.kind == "exact" for d in diffs if d.path == "numerics")
+
+
+class TestSchemaSection:
+    def test_the_column_set_is_recorded(self):
+        r = record()
+        assert r["schema"] == sorted(
+            ["label", "area", "perimeter", "shape_index", "elongation"]
+        )
+
+    def test_a_dropped_column_is_a_difference(self):
+        """A column vanishing from `cells` on both sides is invisible to the
+        per-column summary loop, so the column list itself must be pinned."""
+        a = build_record(
+            fake_result(),
+            entry="fake-entry",
+            invocation={"segmentation": "threshold", "pixel_size_um": None},
+            environment={"mermin": "0.5.0", "scikit-image": "0.26.0"},
+        )
+        result = fake_result()
+        result.cells = result.cells.drop("elongation")
+        b = build_record(
+            result,
+            entry="fake-entry",
+            invocation={"segmentation": "threshold", "pixel_size_um": None},
+            environment={"mermin": "0.5.0", "scikit-image": "0.26.0"},
+        )
+        diffs = compare(a, b)
+        assert any(d.path == "schema" for d in diffs)
+
+
+class TestCorrelationCurve:
+    def test_the_curve_shape_is_summarised(self):
+        r = record(r_bins=(1.0, 2.0, 3.0), g_values=(0.9, 0.5, 0.1))
+        curve = r["numerics"]["correlations"]
+        assert curve["g_values"] == {"min": 0.1, "max": 0.9, "mean": pytest.approx(0.5)}
+        assert curve["r_bins"] == {"first": 1.0, "last": 3.0}
+
+    def test_a_changed_curve_with_unchanged_length_and_bin_count_is_a_difference(self):
+        a = record(r_bins=(1.0, 2.0, 3.0), g_values=(0.9, 0.5, 0.1), corr_len=4.0)
+        b = record(r_bins=(1.0, 2.0, 3.0), g_values=(0.9, 0.5, 0.9), corr_len=4.0)
+        diffs = compare(a, b)
+        assert any(d.path == "numerics.correlations.g_values.mean" for d in diffs)
+
+    def test_the_fallback_case_is_null_not_a_crash(self):
+        r = record(r_bins=(), g_values=())
+        curve = r["numerics"]["correlations"]
+        assert curve["g_values"] is None
+        assert curve["r_bins"] is None
+
+    def test_two_fallback_records_compare_equal(self):
+        a = record(r_bins=(), g_values=())
+        b = record(r_bins=(), g_values=())
+        assert compare(a, b) == []
+
+    def test_a_fallback_record_differs_from_a_real_one(self):
+        a = record(r_bins=(), g_values=())
+        b = record(r_bins=(1.0,), g_values=(0.9,))
+        diffs = compare(a, b)
+        paths = {d.path for d in diffs}
+        assert "numerics.correlations.g_values" in paths
+        assert "numerics.correlations.r_bins" in paths
