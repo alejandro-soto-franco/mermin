@@ -11,7 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 from scipy import ndimage
-from skimage import feature, filters, morphology, segmentation
+from skimage import feature, filters, segmentation
 
 from mermin.errors import SegmentationError
 
@@ -45,6 +45,23 @@ def _check_plane(plane: np.ndarray) -> np.ndarray:
             f"segmentation takes one 2D plane, got shape {plane.shape}"
         )
     return plane
+
+
+def _remove_small_objects(foreground: np.ndarray, min_size: int) -> np.ndarray:
+    """Drop connected components holding fewer than `min_size` pixels.
+
+    Written out rather than taken from `skimage.morphology`, whose
+    `remove_small_objects` moved this boundary in 0.26: `min_size` is rewritten
+    to `max_size` and compared with `<=`, so a component of exactly `min_size`
+    pixels is kept on 0.25 and dropped on 0.26, and `max_size` does not exist
+    before 0.26 at all. This backend's masks carry goldens, so they cannot move
+    when a dependency is upgraded.
+    """
+    labelled, _count = ndimage.label(foreground)
+    sizes = np.bincount(labelled.ravel())
+    keep = sizes >= min_size
+    keep[0] = False
+    return keep[labelled]
 
 
 @dataclass
@@ -82,7 +99,7 @@ class ThresholdBackend:
             return empty
 
         foreground = smoothed > filters.threshold_otsu(smoothed)
-        foreground = morphology.remove_small_objects(foreground, min_size=self.min_size)
+        foreground = _remove_small_objects(foreground, min_size=self.min_size)
         if not foreground.any():
             return empty
 
