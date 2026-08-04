@@ -18,6 +18,14 @@ from pathlib import Path
 python_dir = Path(__file__).parent.parent / "python"
 sys.path.insert(0, str(python_dir))
 
+# The golden suite (test_corpus_goldens.py) consumes the corpus tooling
+# (mermin_corpus.goldens, .invariants, .generate) directly, the same way it
+# consumes mermin itself. mermin_corpus/__init__.py is import-light, so
+# putting this on the path costs nothing for the hermetic (non-corpus) tests
+# that never import anything under mermin_corpus.
+corpus_src_dir = Path(__file__).parent.parent / "corpus" / "src"
+sys.path.insert(0, str(corpus_src_dir))
+
 MANIFEST_PATH = Path("/mnt/ASF-EX1/mermin-corpus/manifest.toml")
 
 
