@@ -30,20 +30,28 @@ module-level `require_corpus()` skip (that would skip this file's CI-bound
 tests too); it is a plain `pytest.skip` inside the `analysed` fixture, which
 only the two `corpus`-marked, golden-backed tests below depend on.
 
-`mermin` and `mermin_corpus.generate`/`.goldens`/`.invariants` are all
-imported at module level regardless: `mermin/__init__.py` is a lazy
-`__getattr__` shim (no heavy submodule import until an attribute like
-`analyze` is actually touched), and `mermin_corpus.generate` pulls in only
-`tomlkit` (via `.manifest`) at import time, not `bioio` or `mermin` itself.
-Neither costs anything to import on a machine with no corpus volume, and
-`mermin.analyze` is never actually called except inside the `analysed`
-fixture, which the `corpus`-marked tests alone depend on.
+**`mermin_corpus.generate` is imported lazily, not at module level, for the
+same reason.** `mermin_corpus.goldens` and `.invariants` (imported below,
+unconditionally) touch nothing past the standard library. `.generate` is
+different: it imports `.manifest`, which imports `tomlkit`, a
+`mermin-corpus` dependency that is not part of the standard `mermin` test
+environment and is absent from CI's `python-tests` and `floors` jobs. A
+module-level `from mermin_corpus.generate import ...` on such a machine
+raises `ModuleNotFoundError` during collection, before pytest has any chance
+to skip: an error, not a skip, exactly the failure mode phase 1 already
+ruled out for an unmounted drive. The `corpus_tooling` fixture below imports
+it at test setup instead and skips with a stated reason if it is not
+installed, so this file behaves the same way for an absent optional
+dependency as it already does for an absent drive: `mermin` itself is
+unaffected (`mermin/__init__.py` is a lazy `__getattr__` shim, so importing
+it plainly costs nothing either).
 """
 from __future__ import annotations
 
 import copy
 import json
 import warnings
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -52,24 +60,41 @@ from conftest import MANIFEST_PATH, _entry_artefact_path
 
 import mermin
 
-from mermin_corpus.generate import GOLDEN_ENTRIES, _environment, golden_path
 from mermin_corpus.goldens import LOOSE, TIGHT, build_record, compare
 from mermin_corpus.invariants import check_invariants
 
-# The eight entries the phase 4 corpus survey found reachable through
-# `analyze()` under the deterministic threshold backend. `GOLDEN_ENTRIES` (the
-# generator's own table, imported rather than re-typed here) is the single
-# place that list is written down; this suite parametrises over its keys
-# rather than carrying a second copy that could drift from it.
-ENTRY_IDS = sorted(GOLDEN_ENTRIES)
+_GOLDENS_DIR = Path(__file__).resolve().parent.parent / "corpus" / "goldens"
 
-
-def _load_golden(entry_id: str) -> dict[str, Any]:
-    return json.loads(golden_path(entry_id).read_text())
+# The entries currently pinned by a committed golden, read off disk rather
+# than from `mermin_corpus.generate.GOLDEN_ENTRIES`. `@pytest.mark.parametrize`
+# below runs at collection time, before any fixture gets a chance to skip, so
+# this list must not need `tomlkit` (or anything else `generate` pulls in) to
+# exist at all; the committed `corpus/goldens/*.json` files are already the
+# source of truth for which entries are golden-able, so nothing is lost by
+# reading the directory instead of the generator's table.
+ENTRY_IDS = sorted(p.stem for p in _GOLDENS_DIR.glob("*.json"))
 
 
 @pytest.fixture(scope="session")
-def analysed():
+def corpus_tooling():
+    """`mermin_corpus.generate`, imported here rather than at module level.
+
+    Skips with a stated reason if `tomlkit` (a `mermin-corpus` dependency,
+    not a `mermin` one) is not installed, rather than letting collection
+    fail with `ModuleNotFoundError`. See the module docstring.
+    """
+    try:
+        import mermin_corpus.generate as generate
+    except ImportError as exc:
+        pytest.skip(
+            f"mermin_corpus.generate unavailable ({exc}); corpus-backed "
+            "suite skipped"
+        )
+    return generate
+
+
+@pytest.fixture(scope="session")
+def analysed(corpus_tooling):
     """A cache of `(golden, result)` keyed by entry id, shared across every
     test in the session.
 
@@ -85,18 +110,21 @@ def analysed():
     source of truth for how it was produced, and this way a golden always
     documents the exact call that can reproduce it.
 
-    Skips (not module-level: see the module docstring) unless the ASF-EX1
-    corpus manifest is mounted, since every caller of this fixture needs the
-    drive.
+    Depends on `corpus_tooling` first, so a missing `tomlkit` skips before
+    the drive is even checked: the absent tooling, not the drive, is what
+    gates these tests when both `test_matches_golden` and
+    `test_invariants_hold` need `analyze()`'s output regardless of whether
+    either individually needs `generate` past this point.
     """
     if not MANIFEST_PATH.exists():
         pytest.skip(f"{MANIFEST_PATH} not mounted; corpus-backed suite skipped")
 
+    generate = corpus_tooling
     cache: dict[str, tuple[dict[str, Any], Any]] = {}
 
     def _get(entry_id: str) -> tuple[dict[str, Any], Any]:
         if entry_id not in cache:
-            golden = _load_golden(entry_id)
+            golden = json.loads(generate.golden_path(entry_id).read_text())
             invocation = golden["invocation"]
             path = _entry_artefact_path(entry_id)
             result = mermin.analyze(
@@ -113,7 +141,7 @@ def analysed():
 
 @pytest.mark.corpus
 @pytest.mark.parametrize("entry_id", ENTRY_IDS)
-def test_matches_golden(entry_id, analysed):
+def test_matches_golden(entry_id, analysed, corpus_tooling):
     """`analyze()` on this entry, today, must reproduce its committed
     golden.
 
@@ -126,7 +154,10 @@ def test_matches_golden(entry_id, analysed):
     """
     golden, result = analysed(entry_id)
     current = build_record(
-        result, entry=entry_id, invocation=golden["invocation"], environment=_environment()
+        result,
+        entry=entry_id,
+        invocation=golden["invocation"],
+        environment=corpus_tooling._environment(),
     )
     diffs = compare(golden, current)
 
@@ -162,7 +193,11 @@ def test_invariants_hold(entry_id, analysed):
 
 
 def _phantom_uniform_golden() -> dict[str, Any]:
-    return json.loads(golden_path("phantom-uniform").read_text())
+    # Reads straight off `_GOLDENS_DIR`, not through
+    # `mermin_corpus.generate.golden_path`: this test must not need
+    # `tomlkit` any more than `ENTRY_IDS` above does, since it is the whole
+    # reason this suite is not corpus-only.
+    return json.loads((_GOLDENS_DIR / "phantom-uniform.json").read_text())
 
 
 def test_comparator_reports_an_exact_field_perturbation():
