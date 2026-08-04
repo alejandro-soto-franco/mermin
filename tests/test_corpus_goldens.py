@@ -171,6 +171,36 @@ def test_matches_golden(entry_id, analysed, corpus_tooling):
     )
 
 
+@pytest.mark.parametrize("entry_id", ENTRY_IDS)
+def test_golden_invocation_matches_the_generator_table(entry_id, corpus_tooling):
+    """`test_matches_golden` reads `invocation` from the golden and passes
+    that same dict to both `analyze()` and `build_record`, so its
+    `invocation` section is compared against itself and can never fail: a
+    golden hand-edited to disagree with `mermin_corpus.generate.GOLDEN_ENTRIES`
+    (the table that is supposed to have produced it) would still pass there.
+
+    This test closes that gap by deriving the expected `invocation` from
+    `GOLDEN_ENTRIES` independently -- the same four-field shape
+    `generate.build_entry_record` writes, reconstructed here rather than
+    imported from it, since there is no pure function in `generate.py` that
+    returns just the invocation without running a full `analyze()` -- and
+    comparing it to what the committed golden actually records. Needs
+    `corpus_tooling` (so `tomlkit`-absent still skips cleanly) but not the
+    drive: `GOLDEN_ENTRIES` and the golden files are both already checked
+    in, so this runs even when ASF-EX1 is not mounted.
+    """
+    generate = corpus_tooling
+    golden = json.loads(generate.golden_path(entry_id).read_text())
+    spec = generate.GOLDEN_ENTRIES[entry_id]
+    expected_invocation = {
+        "segmentation": "threshold",
+        "pixel_size_um": spec["kwargs"].get("pixel_size_um"),
+        "pixel_size_um_assumed": spec["pixel_size_um_assumed"],
+        "channels": spec["kwargs"].get("channels"),
+    }
+    assert golden["invocation"] == expected_invocation
+
+
 @pytest.mark.corpus
 @pytest.mark.parametrize("entry_id", ENTRY_IDS)
 def test_invariants_hold(entry_id, analysed):
