@@ -223,24 +223,43 @@ jobs:
         # A cellpose that silently failed to install would make the test
         # below skip rather than run, which would report green while
         # testing nothing. Fail here first, with a clear cause, if that ever
-        # happens.
+        # happens. importlib.metadata, not cellpose.version.version: cellpose
+        # itself does not have a version submodule, `cellpose.version` is
+        # already the version string, and this check must not repeat the
+        # unexecuted-assertion mistake it exists to catch.
         run: |
           source .venv/bin/activate
-          python -c "import cellpose; print('cellpose', cellpose.version.version, 'importable')"
+          python -c "
+          import importlib.metadata
+          print('cellpose', importlib.metadata.version('cellpose'), 'importable')
+          "
 
       - name: Run the real cellpose backend test
         # Not `-m "not corpus"`: this file carries no corpus mark and is the
         # entire point of this job. Cellpose being importable, its skipif
         # does not fire and the test genuinely runs `CellposeBackend.segment`
-        # against a synthetic image - piping through `tee` and then grepping
-        # for "2 passed" catches a skip reporting success (exit 0 with 0
-        # collected or 2 skipped) in addition to `pipefail` catching a
-        # failure or error.
+        # against a synthetic image.
+        #
+        # `pipefail` catches a genuine failure or error (nonzero pytest
+        # exit). The `skipped` check below catches the other way this can
+        # go green while testing nothing: the test skipping regardless, in
+        # which case pytest itself still exits 0. This checks the property
+        # the job actually needs - that the test ran, not that it skipped -
+        # rather than counting passes, which breaks the moment a third test
+        # is added to the file and, worse, on pytest's own summary-line
+        # padding (`===...=== 2 passed ...===...===` never begins a line
+        # with `2 passed`, so an anchored count match here would fail
+        # unconditionally on every run, including a good one; verified
+        # against real pytest output before landing this, not reasoned
+        # about).
         run: |
           source .venv/bin/activate
           set -o pipefail
           pytest tests/test_cellpose_backend.py -v --tb=short -rs | tee /tmp/cellpose-test.log
-          grep -Eq "^2 passed" /tmp/cellpose-test.log
+          if grep -qi "skipped" /tmp/cellpose-test.log; then
+            echo "the cellpose test skipped in a job that installed cellpose"
+            exit 1
+          fi
 
   wheel-smoke:
     name: Wheel smoke test
