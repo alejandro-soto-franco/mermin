@@ -25,13 +25,23 @@ from mermin.pipeline import analyze
 
 
 def _write_synthetic_two_channel_tif(path):
-    """A CYX tif with a nuclear channel holding three discs and a striped
+    """A CYX tif with a nuclear channel holding six discs and a striped
     fibre channel, wavelength metadata so role resolution needs no explicit
-    channel mapping."""
+    channel mapping.
+
+    Six discs, not three: `analyze()` only takes the `orientational_correlation`
+    branch in `pipeline.py` when `len(labels) >= 3`, and a fixture holding
+    exactly three cells covers that branch by a margin of one. Six keeps the
+    coverage clear of the threshold rather than incidental to it.
+    """
     h, w = 96, 96
     nuclear = np.zeros((h, w), dtype=np.uint16)
     rng = np.random.default_rng(0)
-    for cy, cx in [(20, 20), (20, 70), (70, 45)]:
+    centres = [
+        (20, 20), (20, 50), (20, 80),
+        (70, 20), (70, 50), (70, 80),
+    ]
+    for cy, cx in centres:
         yy, xx = np.ogrid[:h, :w]
         disc = (yy - cy) ** 2 + (xx - cx) ** 2 <= 8**2
         nuclear[disc] = 4000 + rng.integers(0, 200)
@@ -77,11 +87,24 @@ def test_analyze_runs_end_to_end_on_a_synthetic_image(tmp_path):
         "nuclear_angle",
     }
     assert expected_columns.issubset(set(result.cells.columns))
-    assert len(result.cells) > 0
+
+    # Six nuclei, comfortably above the `len(labels) >= 3` threshold that
+    # gates the `orientational_correlation` branch in `pipeline.py`, so this
+    # assertion states the branch coverage rather than leaving it incidental.
+    assert len(result.cells) >= 6
 
     assert result.segmentation["backend"] == "threshold"
 
     assert result.fields["theta"].shape == (96, 96)
+
+    # The correlation branch ran: real bins came back from
+    # `_native.orientational_correlation`, not the `len(labels) < 3` fallback
+    # dict of empty `r_bins`/`g_values` and an infinite correlation length.
+    # (The synthetic fibre field is uniform, so an infinite correlation
+    # length is itself a correct fit result here and is not a useful signal
+    # of which branch ran.)
+    assert len(result.correlations["r_bins"]) > 0
+    assert len(result.correlations["g_values"]) > 0
 
     assert set(result.frank.keys()) == {"splay", "bend", "ratio"}
     assert set(result.ldg_params.keys()) == {"a", "b", "c", "k_elastic"}

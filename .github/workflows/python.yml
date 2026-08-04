@@ -30,6 +30,36 @@ env:
   PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
 
 jobs:
+  extras-resolve:
+    name: Optional-dependency extras resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
+      - name: Resolve every declared optional-dependency group
+        run: |
+          cd mermin-py
+          status=0
+          for extra in $(python3 -c "
+          import tomllib
+          d = tomllib.load(open('pyproject.toml', 'rb'))
+          print(' '.join(d['project']['optional-dependencies']))
+          "); do
+            echo "::group::Resolving extra '$extra'"
+            if uv pip compile pyproject.toml --extra "$extra" -o "$(mktemp)"; then
+              echo "extra '$extra' resolves"
+            else
+              echo "extra '$extra' does not resolve"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
   rust-check:
     name: Rust compile check (mermin-py)
     runs-on: ubuntu-latest
@@ -78,6 +108,18 @@ jobs:
         run: |
           source .venv/bin/activate
           python -c "from mermin._native import analyze_shape; print('mermin._native loaded')"
+
+      - name: Assert the test environment is cellpose free
+        run: |
+          source .venv/bin/activate
+          PYTHONPATH=python python -c "
+          import importlib.util, sys
+          assert importlib.util.find_spec('cellpose') is None, 'cellpose leaked into the hermetic environment'
+          import mermin.backends
+          assert 'cellpose' not in sys.modules, 'mermin.backends imported cellpose'
+          assert 'torch' not in sys.modules, 'mermin.backends pulled torch'
+          print('hermetic: cellpose absent, backends import clean')
+          "
 
       - name: Run tests
         run: |

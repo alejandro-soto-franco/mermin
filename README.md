@@ -40,13 +40,23 @@ mermin takes multi-channel fluorescence microscopy images (TIFF, OME-TIFF, OME-Z
 pip install mermin
 ```
 
+Segmentation runs on a threshold and watershed backend by default, which needs
+no extra dependency and is deterministic. Cellpose 4 is optional:
+
+    uv add "mermin[cellpose]"
+
+It brings torch, torchvision and a model checkpoint downloaded on first use.
+With it installed, `mermin.analyze` selects it; without it, the threshold
+backend runs and a warning names the fallback. Pass `segmentation="threshold"`
+to choose it outright and silence the warning.
+
 Requires Python 3.10+. The Rust extension is compiled automatically via [maturin](https://www.maturin.rs/).
 
 ### Rust (for library use)
 
 ```toml
 [dependencies]
-mermin = "0.4"
+mermin = "0.5"
 ```
 
 ### Build from source
@@ -149,7 +159,7 @@ TIFF, OME-TIFF, OME-Zarr (nuclear + fibre channels)
   |
   +-- 1. Preprocessing ---- percentile contrast normalisation
   |
-  +-- 2. Segmentation ----- Cellpose (nuclei), watershed (cell bodies)
+  +-- 2. Segmentation ----- backend protocol (nuclei), watershed (cell bodies)
   |
   +-- 3. Shape analysis ---- Minkowski tensors, Fourier modes, morphometrics
   |
@@ -214,7 +224,7 @@ mermin builds on the [cartan](https://crates.io/crates/cartan) ecosystem for dif
 - **cartan-geo**: holonomy-based topological defect detection
 - **cartan-optim**: Riemannian trust region for Landau-de Gennes fitting
 
-Python dependencies: numpy, polars, cellpose, scikit-image, scipy, matplotlib, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O.
+Python dependencies: numpy, polars, scikit-image, scipy, matplotlib, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O. Cellpose 4 is an optional extra, `mermin[cellpose]`.
 
 ## License
 

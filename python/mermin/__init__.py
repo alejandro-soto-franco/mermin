@@ -11,7 +11,7 @@ try:
 except PackageNotFoundError:
     # Not installed, e.g. this checkout on `sys.path` with no wheel built.
     # Kept in step with `[workspace.package] version` in Cargo.toml by hand.
-    __version__ = "0.4.0"
+    __version__ = "0.5.0"
 
 __all__ = [
     "open_image",
