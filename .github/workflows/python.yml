@@ -60,6 +60,41 @@ jobs:
           done
           exit $status
 
+  floors:
+    name: Lowest declared dependency floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: floors
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install uv
+        run: pip install uv
+      - name: Install mermin at the lowest declared floors, not the highest
+        # Every other job resolves highest, so a wrong or missing floor
+        # still passes CI: that is how fsspec>=2024.12.0 went missing from
+        # 0.4.0 unnoticed. `--resolution lowest-direct` installs mermin's
+        # own dependencies at their declared floor versions (not their
+        # transitive dependencies, which `lowest` would drag down for
+        # unrelated reasons and fail to resolve).
+        run: |
+          cd mermin-py
+          uv venv .venv --python 3.13
+          uv pip install --python .venv/bin/python --resolution lowest-direct -e .
+          uv pip install --python .venv/bin/python pytest
+      - name: Verify the build actually works at the floors
+        # An import proves almost nothing: the fsspec floor's own failure
+        # imported cleanly and only broke on reading a file. Run a slice
+        # that exercises real image I/O and the compiled pipeline.
+        run: |
+          source mermin-py/.venv/bin/activate
+          python -c "import mermin; from mermin._native import analyze_shape; print('mermin', mermin.__version__, 'built and imported at the lowest declared floors')"
+          pytest tests/test_ingest.py tests/test_analyze_end_to_end.py tests/test_smoke.py -v --tb=short -m "not corpus"
+
   rust-check:
     name: Rust compile check (mermin-py)
     runs-on: ubuntu-latest
@@ -91,14 +126,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Create virtualenv and install deps
+      - name: Create virtualenv and install build/test tooling
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin pytest numpy scipy polars tifffile scikit-image \
-            bioio bioio-ome-tiff bioio-ome-zarr bioio-tifffile "fsspec>=2024.12.0"
+          pip install maturin pytest
 
       - name: Build and install (dev mode)
+        # maturin installs mermin's own declared dependencies from
+        # mermin-py/pyproject.toml as part of this step, so nothing beyond
+        # the build/test tooling above needs installing by hand: a
+        # hand-maintained list beside pyproject.toml only drifts from it.
         run: |
           source .venv/bin/activate
           cd mermin-py
