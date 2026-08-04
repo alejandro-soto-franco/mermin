@@ -71,7 +71,7 @@ jobs:
           key: floors
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11'
       - name: Install uv
         run: pip install uv
       - name: Install mermin at the lowest declared floors, not the highest
@@ -80,10 +80,14 @@ jobs:
         # 0.4.0 unnoticed. `--resolution lowest-direct` installs mermin's
         # own dependencies at their declared floor versions (not their
         # transitive dependencies, which `lowest` would drag down for
-        # unrelated reasons and fail to resolve).
+        # unrelated reasons and fail to resolve). Runs on 3.11, the oldest
+        # Python mermin now declares support for: numpy/scipy/scikit-image's
+        # floors predate Python 3.13 wheels, so 3.13 here previously
+        # produced source-build failures that were about the CI
+        # interpreter, not about mermin's own floors.
         run: |
           cd mermin-py
-          uv venv .venv --python 3.13
+          uv venv .venv --python 3.11
           uv pip install --python .venv/bin/python --resolution lowest-direct -e .
           uv pip install --python .venv/bin/python pytest
       - name: Verify the build actually works at the floors
@@ -112,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
 

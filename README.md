@@ -50,7 +50,7 @@ With it installed, `mermin.analyze` selects it; without it, the threshold
 backend runs and a warning names the fallback. Pass `segmentation="threshold"`
 to choose it outright and silence the warning.
 
-Requires Python 3.10+. The Rust extension is compiled automatically via [maturin](https://www.maturin.rs/).
+Requires Python 3.11+. The Rust extension is compiled automatically via [maturin](https://www.maturin.rs/).
 
 ### Rust (for library use)
 

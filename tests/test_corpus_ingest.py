@@ -35,14 +35,7 @@ if not MANIFEST_PATH.exists():
         allow_module_level=True,
     )
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10, where tomllib is not stdlib
-    pytest.skip(
-        "no tomllib available to read the corpus manifest; corpus-backed "
-        "suite skipped",
-        allow_module_level=True,
-    )
+import tomllib
 
 from mermin.ingest import PixelSizeError, open_image
 from mermin.roles import UnresolvableRoleError
