@@ -6,6 +6,7 @@ import sys
 
 from .errors import CorpusError
 from .fetch import fetch_entry
+from .generate import GOLDEN_ENTRIES, check_entry, generate_entry
 from .manifest import Manifest, load
 from .probe import probe_entry
 
@@ -29,6 +30,38 @@ def _status(manifest: Manifest) -> int:
     return 0
 
 
+def _goldens(args: argparse.Namespace) -> int:
+    selected = [args.entry] if args.entry else sorted(GOLDEN_ENTRIES)
+    failed: list[str] = []
+    for entry_id in selected:
+        try:
+            manifest = load()
+            if args.check:
+                diffs = check_entry(manifest, entry_id)
+                real = [d for d in diffs if d.kind != "environment"]
+                environment = [d for d in diffs if d.kind == "environment"]
+                if real:
+                    failed.append(entry_id)
+                    print(f"FAILED  {entry_id}: {len(real)} difference(s)", file=sys.stderr)
+                    for d in real:
+                        print(f"  {d}", file=sys.stderr)
+                else:
+                    print(f"ok      {entry_id}")
+                    for d in environment:
+                        print(f"  {d}")
+            else:
+                path = generate_entry(manifest, entry_id)
+                print(f"wrote   {entry_id} -> {path}")
+        except CorpusError as exc:
+            failed.append(entry_id)
+            print(f"FAILED  {entry_id}: {exc}", file=sys.stderr)
+
+    if failed:
+        print(f"{len(failed)} of {len(selected)} entries failed: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mermin-corpus")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -43,7 +76,14 @@ def main(argv: list[str] | None = None) -> int:
         if name == "fetch":
             p.add_argument("--force", action="store_true")
 
+    goldens_parser = sub.add_parser("goldens")
+    goldens_parser.add_argument("--entry")
+    goldens_parser.add_argument("--check", action="store_true")
+
     args = parser.parse_args(argv)
+
+    if args.command == "goldens":
+        return _goldens(args)
 
     try:
         manifest = load()

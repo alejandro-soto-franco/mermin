@@ -1,0 +1,120 @@
+{
+  "counts": {
+    "cells": 123,
+    "defects": 124,
+    "nuclei": 123
+  },
+  "entry": "idr0062-6001240",
+  "environment": {
+    "bioio": "3.5.0",
+    "mermin": "0.5.0",
+    "numpy": "2.5.1",
+    "polars": "1.43.2",
+    "scikit-image": "0.26.0",
+    "scipy": "1.18.0"
+  },
+  "ingest": {
+    "pixel_size_um": 1.0,
+    "projection": "single",
+    "roles": {
+      "fibre": {
+        "index": 0,
+        "mechanism": "name"
+      },
+      "nuclear": {
+        "index": 1,
+        "mechanism": "name"
+      }
+    }
+  },
+  "invocation": {
+    "channels": null,
+    "pixel_size_um": 1.0,
+    "pixel_size_um_assumed": true,
+    "segmentation": "threshold"
+  },
+  "numerics": {
+    "cells": {
+      "area": {
+        "max": 13082.5,
+        "mean": 461.4979674796748,
+        "min": 24.5
+      },
+      "elongation": {
+        "max": 0.9043812785326896,
+        "mean": 0.4577359452676211,
+        "min": 0.04654349098723134
+      },
+      "perimeter": {
+        "max": 1149.2916120846571,
+        "mean": 114.21015176454783,
+        "min": 19.89949493661166
+      },
+      "shape_index": {
+        "max": 19.194664568652648,
+        "mean": 6.007104308555284,
+        "min": 3.98732361040732
+      }
+    },
+    "correlations": {
+      "correlation_length": 76.61349538245527,
+      "g_values": {
+        "max": 0.8183848258807761,
+        "mean": 0.07123069015064763,
+        "min": -0.1440176523793891
+      },
+      "n_bins": 20,
+      "r_bins": {
+        "first": 3.4375,
+        "last": 134.0625
+      }
+    },
+    "fields": {
+      "coherence_mean": 0.054698246125980315,
+      "coherence_std": 0.03510558903944378,
+      "optimal_sigma_mean": 1.2417443810801745,
+      "optimal_sigma_std": 0.8807359707219736,
+      "shape": [
+        275,
+        271
+      ],
+      "theta_mean": 1.473027085182006,
+      "theta_std": 0.934127760349944
+    },
+    "frank": {
+      "bend": 2165.2416266058285,
+      "ratio": 1.065224467495696,
+      "splay": 2306.4683587007084
+    },
+    "ldg_params": {
+      "a": -0.5465507301483169,
+      "b": 0.0,
+      "c": 1.0,
+      "k_elastic": 3208.0492913156145
+    }
+  },
+  "schema": [
+    "area",
+    "centroid_x",
+    "centroid_y",
+    "convexity",
+    "elongation",
+    "elongation_angle",
+    "label",
+    "nuclear_angle",
+    "nuclear_aspect_ratio",
+    "perimeter",
+    "shape_index"
+  ],
+  "schema_version": "1",
+  "segmentation": {
+    "backend": "threshold",
+    "config": {
+      "min_distance": 5,
+      "min_size": 25,
+      "sigma": 2.0
+    },
+    "mechanism": "explicit",
+    "version": "threshold-1"
+  }
+}

@@ -119,7 +119,16 @@ def build_record(
             "frank": {k: float(v) for k, v in result.frank.items()},
             "fields": {
                 "shape": list(theta.shape),
-                "optimal_sigma": float(result.fields["optimal_sigma"]),
+                # `optimal_sigma` is a per-pixel field (mermin-orient's
+                # multiscale structure tensor picks the coherence-maximising
+                # scale at every pixel independently), the same shape as
+                # `theta` and `coherence`, not a single scalar chosen once
+                # for the whole image. It is summarised the same way they
+                # are rather than cast through `float()`, which raised on
+                # every real (non-`fake_result`) analysis: `float()` only
+                # accepts a 0-dimensional array.
+                "optimal_sigma_mean": float(result.fields["optimal_sigma"].mean()),
+                "optimal_sigma_std": float(result.fields["optimal_sigma"].std()),
                 "theta_mean": float(theta.mean()),
                 "theta_std": float(theta.std()),
                 "coherence_mean": float(coherence.mean()),
@@ -133,15 +142,20 @@ def build_record(
                 # changes shape. `analyze()` takes the `len(labels) < 3`
                 # fallback with both lists empty, in which case these are
                 # `None` rather than an aggregate of nothing.
+                # `len(...)`, not bare truthiness: `_native.orientational_
+                # correlation` returns `r_bins`/`g_values` as numpy arrays on
+                # every real analysis (only the `len(labels) < 3` fallback in
+                # `analyze()` uses plain empty lists), and `bool()` on a
+                # multi-element ndarray raises rather than testing emptiness.
                 "g_values": {
                     "min": float(min(g_values)),
                     "max": float(max(g_values)),
                     "mean": float(sum(g_values) / len(g_values)),
-                } if g_values else None,
+                } if len(g_values) else None,
                 "r_bins": {
                     "first": float(r_bins[0]),
                     "last": float(r_bins[-1]),
-                } if r_bins else None,
+                } if len(r_bins) else None,
             },
             "ldg_params": {k: float(v) for k, v in result.ldg_params.items()},
             "cells": cells,

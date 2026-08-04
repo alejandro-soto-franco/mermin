@@ -19,3 +19,7 @@ class FetchError(CorpusError):
 
 class ProbeError(CorpusError):
     """An artefact could not be probed, usually because it was never fetched."""
+
+
+class GenerateError(CorpusError):
+    """A golden could not be generated or checked."""

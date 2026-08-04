@@ -39,7 +39,7 @@ def fake_result(*, n_cells=3, area_mean=10.0, splay=1.25, corr_len=4.0,
         fields={
             "theta": np.full((8, 8), 0.5),
             "coherence": np.full((8, 8), 0.25),
-            "optimal_sigma": 2.0,
+            "optimal_sigma": np.full((8, 8), 2.0),
         },
         defects=[{"position": (1, 1), "charge": 0.5, "angle": 0.0}],
         correlations={"correlation_length": corr_len, "r_bins": list(r_bins), "g_values": list(g_values)},
