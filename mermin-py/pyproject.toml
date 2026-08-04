@@ -10,11 +10,22 @@ requires-python = ">=3.11"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Alejandro Soto Franco" }]
 dependencies = [
-    "numpy>=1.24",
+    # bioio-ome-zarr below pulls in zarr>=3.1.0, which requires numpy>=2.0
+    # outright, so numpy 2 is unavoidable anywhere in this graph: every
+    # compiled dependency here must be a numpy-2-built release, not merely
+    # one that declares numpy 2 support. numpy>=2.0, scipy>=1.13.0,
+    # scikit-image>=0.23 and matplotlib>=3.8.4 are each bisected to the
+    # lowest version that actually imports against numpy 2.0.0 on Python
+    # 3.11; the version directly below each raises `ValueError: numpy.dtype
+    # size changed` (scikit-image 0.22.0) or is outright unresolvable
+    # against numpy==2.0.0 (scipy 1.12.0, matplotlib 3.8.0-3.8.3). Do not
+    # lower these without re-checking against numpy 2, not against what
+    # each project's own advertised floor claims.
+    "numpy>=2.0",
     "polars>=0.20",
-    "scikit-image>=0.22",
-    "scipy>=1.12",
-    "matplotlib>=3.8",
+    "scikit-image>=0.23",
+    "scipy>=1.13.0",
+    "matplotlib>=3.8.4",
     "tifffile>=2024.1",
     "bioio>=3.4.0",
     "bioio-ome-tiff>=1.0",
