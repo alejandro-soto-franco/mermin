@@ -23,20 +23,20 @@ dependencies = [
     # claims.
     #
     # scikit-image's own floor is raised past that numpy-2 bisection to
-    # 0.25 for a second, independent reason: `skimage.segmentation.watershed`
-    # changed its boundary tie-breaking between 0.24 and 0.25. Measured on
-    # both a phantom and real IDR data, 0.23.2 and 0.24.0 agree with each
-    # other, 0.25.2 and 0.26.0 agree with each other, and the two pairs
-    # disagree by a handful of pixels in 65536, always boundary slivers
-    # between adjacent nuclei (peak and label counts never move). At a
-    # floor of 0.23, the threshold backend's determinism holds only within
-    # a version pair, which contradicts the reason that backend exists and
-    # would undermine every golden pinned against it. Do not lower this
-    # without re-checking watershed's boundary tie-breaking, not only that
-    # it imports.
+    # 0.25.2 for a second, independent reason: `skimage.segmentation.watershed`
+    # changed its boundary tie-breaking between 0.24 and 0.25, and that
+    # change is not stable across the whole 0.25 line. 0.25.0 and 0.25.1 were
+    # measured directly (not assumed from the 0.25.2/0.26.0 pair already
+    # measured against 0.23/0.24): every one of the eight corpus goldens
+    # fails against them, by 6-40% relative, sixty to four hundred times past
+    # even the pre-tightening 1e-3 tolerance. 0.25.2 and 0.26.0 reproduce
+    # every golden bit-exactly. `scikit-image>=0.25.2` is therefore the
+    # lowest release measured to be watershed-stable, not a claim that the
+    # whole 0.25 line is. Do not lower this without re-measuring 0.25.0 and
+    # 0.25.1 directly, not only that a version imports.
     "numpy>=2.0",
     "polars>=0.20",
-    "scikit-image>=0.25",
+    "scikit-image>=0.25.2",
     "scipy>=1.13.0",
     "tifffile>=2024.1",
     "bioio>=3.4.0",
