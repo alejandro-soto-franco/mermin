@@ -237,7 +237,7 @@ mermin builds on the [cartan](https://crates.io/crates/cartan) ecosystem for dif
 - **cartan-geo**: holonomy-based topological defect detection
 - **cartan-optim**: Riemannian trust region for Landau-de Gennes fitting
 
-Python dependencies: numpy, polars, scikit-image, scipy, matplotlib, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O. Cellpose 4 is an optional extra, `mermin[cellpose]`.
+Python dependencies: numpy, polars, scikit-image, scipy, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O. Cellpose 4 is an optional extra, `mermin[cellpose]`.
 
 ## License
 
