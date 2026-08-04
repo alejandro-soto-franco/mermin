@@ -14,3 +14,11 @@ from __future__ import annotations
 
 class MerminError(Exception):
     """Base class for every exception mermin itself raises."""
+
+
+class SegmentationError(MerminError):
+    """Segmentation could not be carried out as asked."""
+
+
+class BackendUnavailableError(SegmentationError):
+    """A named segmentation backend is not installed, or is too old."""
