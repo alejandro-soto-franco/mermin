@@ -28,8 +28,9 @@ dependencies = [
     # change is not stable across the whole 0.25 line. 0.25.0 and 0.25.1 were
     # measured directly (not assumed from the 0.25.2/0.26.0 pair already
     # measured against 0.23/0.24): every one of the eight corpus goldens
-    # fails against them, by 6-40% relative, sixty to four hundred times past
-    # even the pre-tightening 1e-3 tolerance. 0.25.2 and 0.26.0 reproduce
+    # fails against them, by 0.039% to 39.8% relative, the largest of those
+    # hundreds of times past even the pre-tightening 1e-3 tolerance and the
+    # smallest inside it. 0.25.2 and 0.26.0 reproduce
     # every golden bit-exactly. `scikit-image>=0.25.2` is therefore the
     # lowest release measured to be watershed-stable, not a claim that the
     # whole 0.25 line is. Do not lower this without re-measuring 0.25.0 and

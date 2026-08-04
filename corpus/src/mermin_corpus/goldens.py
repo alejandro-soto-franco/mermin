@@ -72,17 +72,19 @@ SCHEMA_VERSION = "1"
 #
 # That intent does not survive measurement. Below the floor
 # (`scikit-image>=0.25.2`, the lowest release the watershed change is stable
-# at), the real cross-version change on these mask-dependent quantities is
-# 6-40% relative -- two to three orders of magnitude past anything `1e-3`
-# could absorb, so the old constant was never doing the job its comment
-# claimed. At and above the floor, every reachable corpus entry reproduces
+# at), the real cross-version change on these mask-dependent quantities
+# spans 0.039% to 39.8% relative. The largest is orders of magnitude past
+# anything `1e-3` could absorb, and the smallest, a 3.9e-4 shift in
+# `centroid_y.max`, would have been swallowed by it in silence. The old
+# constant was at once too loose to catch a real change and too weak to
+# absorb the one it named. At and above the floor, every reachable corpus entry reproduces
 # its golden bit-exactly (0.25.2 and 0.26.0 measured, relative delta
 # `0.000e+00` on every mask-dependent quantity, across all eight entries). A
 # loose tolerance no longer has a version boundary to absorb, so what `LOOSE`
 # actually guards against now is floating-point non-associativity across
 # machines: a different BLAS/LAPACK build, thread count, or SIMD path
 # reordering the same reduction. That risk is real but unmeasured on this
-# box, unlike the version boundary it replaces. `1e-6` leaves six orders of
+# box, unlike the version boundary it replaces. `1e-6` leaves five orders of
 # magnitude of headroom over the floating-point noise this pipeline is known
 # to produce elsewhere (a ~7.3e-12 `convexity` ceiling rounding artefact,
 # measured on idr0062 and montano in the phase 4 corpus survey) while
@@ -100,21 +102,35 @@ SCHEMA_VERSION = "1"
 # `nuclear_angle`). That collapsed seven of the eight entries to 1e-14 or
 # below.
 #
-# It did not fix `montano-hvf-2026-04`, and the residual is worth stating
-# rather than quietly absorbing. That entry's angular aggregates still move
-# at all-floors, by 7.2e-6 on the mean and 5.1e-6 on the resultant length,
-# which is larger than the pre-fix figure rather than smaller. The cause is
-# conditioning rather than the formula: its 1495 cells have a resultant
-# length of 0.22, meaning almost no preferred orientation, and the direction
-# of a circular mean is poorly determined when the resultant is small. A
-# summary that is barely defined cannot be pinned tightly, and no choice of
-# tolerance makes it well defined.
+# It did not fix `montano-hvf-2026-04`, whose `elongation_angle` aggregates
+# still move by 7.2e-6 on the mean and 5.1e-6 on the resultant length. Of
+# the 63 numeric leaves compared there, those two are the only ones outside
+# `1e-6`; the masks, counts, areas and perimeters all reproduce exactly.
 #
-# So `LOOSE` stays at `1e-6`, and that one entry's angular aggregates are
-# expected to differ on a dependency set other than the one its golden
-# records in `environment`. Loosening to `1e-5` to cover it would blind
-# every other field, all of which reproduce to 1e-14, to a change ten
-# thousand times larger than any they exhibit.
+# The cause is one degenerate cell, not the tolerance and not the statistic.
+# Label 1087 has an `elongation` of 3.06e-14, so it is numerically a circle
+# and its major axis is undefined. `elongation_from_w1_tensor` resolves that
+# through `symmetric_eigen` and an `evals[0] >= evals[1]` tie-break, which
+# falls differently between compiled `_native` builds: the delta is
+# identical to every digit on Python 3.11 across every dependency set tried,
+# and is exactly 0.0 on 3.13, so the trigger is the binary rather than any
+# dependency version. That one cell moving its doubled angle by 7.69e-3,
+# spread over 1495 cells, predicts a mean shift of 1.17e-5 against 1.1398e-5
+# measured, which accounts for the whole residual. `fit_nuclear_ellipse`
+# uses a closed-form `atan2` with no such branch, which is why
+# `nuclear_angle` is stable at a resultant of 0.048.
+#
+# Aggregate conditioning is not the explanation, and was tested rather than
+# assumed: `idr0062` has a resultant of 0.249, essentially montano's, and
+# reproduces to 1.3e-16.
+#
+# So `LOOSE` stays at `1e-6`. One leaf of 63, on one entry, moving only
+# across compiled binaries, against 61 that are exactly 0.0, does not
+# justify loosening to `1e-5` and blinding every other field. The principled
+# fix is to weight this circular mean by `elongation`, so a degenerate cell
+# contributes nothing, which is the convention `cell_orientations` already
+# uses with coherence; that needs a golden regeneration and is recorded as a
+# follow-up rather than done here.
 TIGHT = 1e-12
 LOOSE = 1e-6
 
@@ -290,8 +306,13 @@ def build_record(
     # `mermin_corpus.invariants`), so there is no boundary-pixel noise here
     # to absorb the way there is in a per-cell area or perimeter. Deliberately
     # left out of `_NUMERIC_TOLERANCE` below, exactly like `schema`, so it
-    # flows through the exact-comparison path with no comparator change: a
-    # sign flip on every charge, or a change to any one charge, must fail.
+    # flows through the exact-comparison path with no comparator change, so
+    # any change to the sum, the minimum or the maximum fails. Note what
+    # those three do not cover: negating every charge in a set that is
+    # symmetric about zero leaves all three unchanged, so `[+0.5, -0.5]`
+    # would survive a global sign flip. No corpus entry has such a set, and
+    # the per-detection charges are not pinned individually because their
+    # count runs to five figures, but the gap is real rather than closed.
     charges = [float(d["charge"]) for d in result.defects]
 
     return {

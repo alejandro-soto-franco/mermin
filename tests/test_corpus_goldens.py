@@ -264,9 +264,12 @@ def test_comparator_reports_a_tight_numeric_perturbation():
 
 def test_comparator_reports_a_loose_numeric_perturbation_outside_tolerance():
     # `cells` derives from contours and centroids, so it does touch the mask
-    # (LOOSE = 1e-3, the tolerance that absorbs a boundary-slivers change in
-    # watershed tie-breaking between skimage versions). A change well outside
-    # that tolerance is still a real difference and must be reported.
+    # and takes `LOOSE`, which is 1e-6. That constant does not absorb a
+    # watershed tie-breaking change between scikit-image versions, which was
+    # its original stated purpose and which measurement refuted: the real
+    # cross-version change runs to tens of per cent. See the tolerance
+    # comment in `mermin_corpus.goldens`. A change well outside `LOOSE` is a
+    # real difference and must be reported.
     golden = _phantom_uniform_golden()
     current = copy.deepcopy(golden)
     original = golden["numerics"]["cells"]["area"]["mean"]
