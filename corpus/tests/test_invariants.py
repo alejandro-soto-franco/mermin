@@ -23,16 +23,22 @@ def fake_result(
     *,
     coherence=0.5,
     area=1.0,
+    areas=None,
     n_cells=3,
     n_nuclei=3,
     correlation_length=4.0,
     charges=(0.5, -1.0),
+    coherence_field=None,
 ):
     """A result that satisfies all five invariants by default, so a caller
-    need only override the one field under test."""
+    need only override the one field under test. `areas` and
+    `coherence_field` let a test give per-row / per-pixel values, for
+    checking that a violation's detail locates the offender."""
+    cell_areas = list(areas) if areas is not None else [area] * n_cells
+    field = coherence_field if coherence_field is not None else np.full((4, 4), coherence)
     return SimpleNamespace(
-        fields={"coherence": np.full((4, 4), coherence)},
-        cells=pl.DataFrame({"area": [area] * n_cells}),
+        fields={"coherence": field},
+        cells=pl.DataFrame({"area": cell_areas}),
         segmentation={"n_nuclei": n_nuclei},
         correlations={"correlation_length": correlation_length},
         defects=[{"charge": charge} for charge in charges],
@@ -149,3 +155,70 @@ class TestMultipleViolationsAllReport:
         result = fake_result(coherence=-1e-9, area=0.0)
         checks = {v.check for v in check_invariants(result)}
         assert checks == {"coherence_range", "area_floor"}
+
+
+class TestKValidation:
+    """`k` is a caller-supplied argument, not a property of the result, so a
+    bad `k` is a programming error and raises rather than reporting a
+    `Violation`."""
+
+    def test_k_zero_raises_a_clear_error_naming_k(self):
+        with pytest.raises(ValueError, match="k"):
+            check_invariants(fake_result(), k=0)
+
+    def test_k_negative_raises(self):
+        with pytest.raises(ValueError, match="k"):
+            check_invariants(fake_result(), k=-1)
+
+    def test_k_non_integer_raises(self):
+        with pytest.raises(ValueError, match="k"):
+            check_invariants(fake_result(), k=2.5)
+
+    def test_k_2_and_k_3_are_accepted(self):
+        assert check_invariants(fake_result(), k=2) == []
+        assert check_invariants(fake_result(charges=(1 / 3, -2 / 3)), k=3) == []
+
+
+class TestViolationDetailsAreLocatable:
+    """`area_floor` and `defect_charge_multiple_of_1_over_k` must name where
+    the offending value lives, not just what it was, so a corpus entry with
+    hundreds of cells or defects has a locator rather than a bare count."""
+
+    def test_area_floor_names_the_offending_row_index(self):
+        result = fake_result(areas=[1.0, 0.1, 1.0])
+        violations = check_invariants(result)
+        detail = next(v.detail for v in violations if v.check == "area_floor")
+        assert "(1, 0.1)" in detail
+
+    def test_area_floor_names_every_offending_row_when_more_than_one(self):
+        result = fake_result(areas=[0.1, 1.0, 0.2])
+        violations = check_invariants(result)
+        detail = next(v.detail for v in violations if v.check == "area_floor")
+        assert "(0, 0.1)" in detail
+        assert "(2, 0.2)" in detail
+
+    def test_defect_charge_names_the_offending_list_index(self):
+        result = fake_result(charges=(0.5, 0.3, -1.0))
+        violations = check_invariants(result)
+        detail = next(
+            v.detail
+            for v in violations
+            if v.check == "defect_charge_multiple_of_1_over_k"
+        )
+        assert "(1, 0.3)" in detail
+
+    def test_coherence_detail_names_the_field_location_above_one(self):
+        field = np.array([[0.5, 0.5], [1.2, 0.5]])
+        result = fake_result(coherence_field=field)
+        violations = check_invariants(result)
+        detail = next(v.detail for v in violations if v.check == "coherence_range")
+        assert "(1, 0)" in detail
+        assert "above the upper bound 1" in detail
+
+    def test_coherence_detail_names_the_field_location_below_zero(self):
+        field = np.array([[0.5, -0.2], [0.5, 0.5]])
+        result = fake_result(coherence_field=field)
+        violations = check_invariants(result)
+        detail = next(v.detail for v in violations if v.check == "coherence_range")
+        assert "(0, 1)" in detail
+        assert "below the lower bound 0" in detail

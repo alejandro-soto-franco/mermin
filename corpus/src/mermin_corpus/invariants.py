@@ -38,33 +38,58 @@ class Violation:
     detail: str
 
 
+def _field_location(shape: tuple[int, ...], flat_index: int) -> tuple[int, ...]:
+    """The multi-dimensional index of a flat (`argmin`/`argmax`-style) index
+    into an array of this shape, so a violation can name a pixel rather than
+    just a value."""
+    if len(shape) <= 1:
+        return (flat_index,)
+    return divmod(flat_index, shape[-1])
+
+
 def _check_coherence_range(result: Any) -> Violation | None:
     """`fields["coherence"]` is `|psi_k|` by construction, so it must lie in
     [0, 1]. A value outside that range means the orientation computation
-    itself is wrong."""
+    itself is wrong. The detail names where in the field the worst value sits
+    and by how much it missed, not merely that it did."""
     coherence = result.fields["coherence"]
     low = float(coherence.min())
     high = float(coherence.max())
-    if low < 0.0 or high > 1.0:
-        return Violation(
-            "coherence_range",
-            f"coherence must lie in [0, 1]; observed range [{low!r}, {high!r}]",
+    if low >= 0.0 and high <= 1.0:
+        return None
+    parts = []
+    if low < 0.0:
+        location = _field_location(coherence.shape, int(coherence.argmin()))
+        parts.append(
+            f"minimum {low!r} at field index {location!r} is {(0.0 - low)!r} "
+            "below the lower bound 0"
         )
-    return None
+    if high > 1.0:
+        location = _field_location(coherence.shape, int(coherence.argmax()))
+        parts.append(
+            f"maximum {high!r} at field index {location!r} is "
+            f"{(high - 1.0)!r} above the upper bound 1"
+        )
+    return Violation(
+        "coherence_range", "coherence must lie in [0, 1]; " + "; ".join(parts)
+    )
 
 
 def _check_area_floor(result: Any) -> Violation | None:
     """A cell area of zero pixels, in this data, does not exist: 0.25 square
     pixels is a floor a degenerate contour must fail rather than sneak
-    through."""
+    through. The detail names the row of each offending cell, so a corpus
+    entry with hundreds of cells has a locator rather than just a count."""
     areas = [float(a) for a in result.cells["area"]]
-    offenders = [a for a in areas if a < MIN_AREA]
+    offenders = [(index, area) for index, area in enumerate(areas) if area < MIN_AREA]
     if offenders:
+        worst_index, worst_area = min(offenders, key=lambda pair: pair[1])
         return Violation(
             "area_floor",
             f"{len(offenders)} of {len(areas)} cell areas fall below the "
-            f"{MIN_AREA!r} square pixel floor; smallest observed "
-            f"{min(offenders)!r}",
+            f"{MIN_AREA!r} square pixel floor; smallest observed {worst_area!r} "
+            f"at row index {worst_index!r}; offending (row index, area) pairs: "
+            f"{offenders!r}",
         )
     return None
 
@@ -100,22 +125,35 @@ def _check_defect_charges_are_multiples_of_1_over_k(
     result: Any, k: int
 ) -> Violation | None:
     """A holonomy-derived defect charge cannot take any value other than a
-    multiple of `1/k`."""
+    multiple of `1/k`. The detail names the list index of each offending
+    defect alongside its charge, so it can be found again in
+    `result.defects`."""
     unit = 1.0 / k
     offenders = []
-    for defect in result.defects:
+    for index, defect in enumerate(result.defects):
         charge = float(defect["charge"])
         nearest = round(charge / unit)
         if abs(charge - nearest * unit) > CHARGE_TOLERANCE:
-            offenders.append(charge)
+            offenders.append((index, charge))
     if offenders:
         return Violation(
             "defect_charge_multiple_of_1_over_k",
             f"{len(offenders)} of {len(result.defects)} defect charges are "
             f"not a multiple of 1/{k!r} within tolerance "
-            f"{CHARGE_TOLERANCE!r}: {offenders!r}",
+            f"{CHARGE_TOLERANCE!r}; offending (defect index, charge) pairs: "
+            f"{offenders!r}",
         )
     return None
+
+
+def _validate_k(k: Any) -> None:
+    """`k` is a caller-supplied parameter, not a property of the result being
+    checked, so a bad `k` is a programming error and earns a raise rather
+    than a `Violation`, the same line the malformed-result decision already
+    draws. A bare `ZeroDivisionError` from `1.0 / k` would be the wrong
+    failure for a function whose contract is returning a list of problems."""
+    if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+        raise ValueError(f"k must be a positive integer, got k={k!r}")
 
 
 def check_invariants(result: Any, *, k: int = 2) -> list[Violation]:
@@ -127,6 +165,7 @@ def check_invariants(result: Any, *, k: int = 2) -> list[Violation]:
     check to check: both are vacuously satisfied rather than treated as
     violations, since an empty result is not itself a defect.
     """
+    _validate_k(k)
     checks = (
         _check_coherence_range(result),
         _check_area_floor(result),
