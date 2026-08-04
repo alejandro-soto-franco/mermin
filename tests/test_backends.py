@@ -233,3 +233,11 @@ class TestResolveBackend:
     def test_non_backend_object_raises(self):
         with pytest.raises(SegmentationError):
             resolve_backend(object())
+
+    def test_class_instead_of_instance_raises_and_names_the_mistake(self):
+        """Leaving off the parentheses on a backend name must raise here,
+        not resolve cleanly and fail later inside `segment` with `plane`
+        bound to `self`. The message must name the class, which distinguishes
+        it from the generic `object()` case above."""
+        with pytest.raises(SegmentationError, match="ThresholdBackend"):
+            resolve_backend(ThresholdBackend)

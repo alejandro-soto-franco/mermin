@@ -205,8 +205,11 @@ class CellposeBackend:
             gpu=self.gpu, pretrained_model=self.pretrained_model
         )
         # Three values, not four. `channels` is ignored by version 4, so it is
-        # not passed, and a bare 2D array is converted to three channels by
-        # cellpose itself.
+        # not passed. A bare 2D plane arrives as a single channel: cellpose
+        # adds a channel axis but does not pad to three, and the model takes
+        # one channel by slicing the first of its pretrained input weights.
+        # Arbitrary channel counts are the version 4 contract, so this is the
+        # intended usage for a single stain.
         masks, _flows, _styles = model.eval(
             plane,
             diameter=self.diameter,
@@ -218,6 +221,12 @@ class CellposeBackend:
 
 
 def _looks_like_a_backend(spec: Any) -> bool:
+    if isinstance(spec, type):
+        # A class satisfies every hasattr check its instances do, so without
+        # this the parentheses being left off a backend name would resolve
+        # cleanly and fail much later, inside segment, with `plane` bound to
+        # `self`.
+        return False
     return all(
         hasattr(spec, attribute)
         for attribute in ("name", "version", "config", "segment")
@@ -259,6 +268,12 @@ def resolve_backend(spec: Any = "auto") -> tuple[SegmentationBackend, str]:
         )
     if _looks_like_a_backend(spec):
         return spec, "instance"
+    if isinstance(spec, type):
+        raise SegmentationError(
+            f"segmentation was given the class {spec.__name__}, not an "
+            f"instance of it. Call it, for example {spec.__name__}(), "
+            "and pass the result instead."
+        )
     raise SegmentationError(
         f"segmentation must be 'auto', 'cellpose', 'threshold', or a "
         f"SegmentationBackend instance, got {type(spec).__name__}"
