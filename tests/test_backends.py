@@ -143,3 +143,93 @@ def test_remove_small_objects_keeps_exactly_min_size_drops_one_less():
     expected = np.zeros_like(foreground)
     expected[0:5, 0:5] = True
     assert np.array_equal(kept, expected)
+
+
+from mermin import backends as backends_module
+from mermin.backends import CellposeBackend, cellpose_version, resolve_backend
+from mermin.errors import BackendUnavailableError
+
+
+class TestCellposeAvailability:
+    def test_module_imports_without_cellpose(self):
+        """Importing the backends module must not pull cellpose.
+
+        `torch` is deliberately not asserted on here: an unrelated package in
+        the environment may have imported it, and this test is about what
+        `mermin.backends` itself pulls. The CI hermetic step checks the wider
+        property in an environment whose contents are controlled.
+        """
+        import sys
+
+        assert "mermin.backends" in sys.modules
+        assert "cellpose" not in sys.modules
+        assert "cellpose.models" not in sys.modules
+
+    def test_constructing_without_cellpose_names_the_extra(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: None)
+        with pytest.raises(BackendUnavailableError, match=r"mermin\[cellpose\]"):
+            CellposeBackend()
+
+    def test_constructing_with_cellpose_3_names_the_installed_version(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: "3.1.1.3")
+        with pytest.raises(BackendUnavailableError, match="3.1.1.3"):
+            CellposeBackend()
+
+    def test_version_and_config_with_cellpose_present(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: "4.2.1.1")
+        backend = CellposeBackend(diameter=30.0)
+        assert backend.name == "cellpose"
+        assert backend.version() == "cellpose-4.2.1.1"
+        assert backend.config()["diameter"] == 30.0
+        assert backend.config()["pretrained_model"] == "cpsam_v2"
+
+    def test_cellpose_version_agrees_with_the_environment(self):
+        """The real detector, unmonkeypatched, against whatever is installed."""
+        import importlib.util
+
+        present = importlib.util.find_spec("cellpose") is not None
+        assert (cellpose_version() is not None) == present
+
+
+class TestResolveBackend:
+    def test_threshold_is_explicit(self):
+        backend, mechanism = resolve_backend("threshold")
+        assert backend.name == "threshold"
+        assert mechanism == "explicit"
+
+    def test_auto_falls_back_and_warns_when_cellpose_is_absent(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: None)
+        with pytest.warns(RuntimeWarning, match="threshold"):
+            backend, mechanism = resolve_backend("auto")
+        assert backend.name == "threshold"
+        assert mechanism == "auto-fallback"
+
+    def test_auto_fallback_warning_names_the_reason(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: "3.1.1.3")
+        with pytest.warns(RuntimeWarning, match="3.1.1.3"):
+            resolve_backend("auto")
+
+    def test_auto_selects_cellpose_when_present(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: "4.2.1.1")
+        backend, mechanism = resolve_backend("auto")
+        assert backend.name == "cellpose"
+        assert mechanism == "auto"
+
+    def test_explicit_cellpose_raises_rather_than_falling_back(self, monkeypatch):
+        monkeypatch.setattr(backends_module, "cellpose_version", lambda: None)
+        with pytest.raises(BackendUnavailableError):
+            resolve_backend("cellpose")
+
+    def test_an_instance_passes_through(self):
+        given = ThresholdBackend(sigma=3.0)
+        backend, mechanism = resolve_backend(given)
+        assert backend is given
+        assert mechanism == "instance"
+
+    def test_unknown_name_raises_and_lists_the_valid_ones(self):
+        with pytest.raises(SegmentationError, match="threshold"):
+            resolve_backend("stardist")
+
+    def test_non_backend_object_raises(self):
+        with pytest.raises(SegmentationError):
+            resolve_backend(object())
