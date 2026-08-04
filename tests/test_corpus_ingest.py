@@ -17,51 +17,27 @@ The manifest-presence check runs before importing `mermin.ingest` (which
 pulls in `bioio`), so the module skips cleanly on a machine that has neither
 the corpus volume nor the heavy imaging dependencies installed, rather than
 erroring on an unrelated `ModuleNotFoundError`.
+
+`MANIFEST_PATH` and `_entry_artefact_path` live in `tests/conftest.py`
+because `tests/` has no `__init__.py`: a bare `pytest tests/` run cannot
+import a second suite's module by dotted path (`tests.test_corpus_ingest`),
+so `test_corpus_segmentation.py` needs the shared lookup somewhere both
+suites can reach without duplicating it.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-MANIFEST_PATH = Path("/mnt/ASF-EX1/mermin-corpus/manifest.toml")
+from conftest import _entry_artefact_path, require_corpus
 
 pytestmark = pytest.mark.corpus
 
-if not MANIFEST_PATH.exists():
-    pytest.skip(
-        f"{MANIFEST_PATH} not mounted; corpus-backed suite skipped",
-        allow_module_level=True,
-    )
-
-import tomllib
+require_corpus()
 
 from mermin.ingest import PixelSizeError, open_image
 from mermin.roles import UnresolvableRoleError
-
-
-def _manifest() -> dict:
-    with MANIFEST_PATH.open("rb") as f:
-        return tomllib.load(f)
-
-
-def _entry_artefact_path(entry_id: str) -> Path:
-    """The on-disk artefact path for a manifest entry, via its `meta.json`.
-
-    Reads the manifest for the entry's partition, then the `meta.json` that
-    sits beside the entry's data for the artefact path the phase 1 prober
-    recorded, rather than hardcoding a corpus layout here.
-    """
-    manifest = _manifest()
-    entry = next((e for e in manifest["entry"] if e["id"] == entry_id), None)
-    if entry is None:
-        raise KeyError(f"{entry_id!r} not found in {MANIFEST_PATH}")
-    root = Path(manifest["root"])
-    meta_path = root / entry["partition"] / entry_id / "meta.json"
-    with meta_path.open() as f:
-        meta = json.load(f)
-    return Path(meta["artefacts"][0]["path"])
 
 
 MONTANO_DIR = Path(
