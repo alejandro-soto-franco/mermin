@@ -199,7 +199,7 @@ charge of +4.5. Merging nearby detections at radii from 3 to 15 pixels does
 not recover the truth either: at every radius tried, the two detections
 nearest the true core sum to a net charge of 0.0. The detector does not
 crash, and each detection's own charge is individually quantised to a
-half-integer multiple of $\pi$, an invariant checked separately; the
+multiple of $1/k$ (a half-integer for $k=2$), an invariant checked separately; the
 detection count and the summed charge across detections are not physical
 quantities. Neighbour-graph construction (`build_neighbor_graph`),
 Poincar&eacute;--Hopf validation and persistent homology are implemented but not
