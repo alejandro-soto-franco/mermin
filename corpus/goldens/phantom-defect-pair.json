@@ -1,0 +1,174 @@
+{
+  "counts": {
+    "cells": 50,
+    "defects": 8,
+    "nuclei": 50
+  },
+  "entry": "phantom-defect-pair",
+  "environment": {
+    "bioio": "3.5.0",
+    "bioio-ome-tiff": "1.4.0",
+    "bioio-ome-zarr": "3.6.0",
+    "bioio-tifffile": "1.3.0",
+    "mermin": "0.5.0",
+    "numpy": "2.4.6",
+    "polars": "1.43.2",
+    "scikit-image": "0.26.0",
+    "scipy": "1.18.0"
+  },
+  "ingest": {
+    "pixel_size_um": 0.5,
+    "projection": "single",
+    "roles": {
+      "fibre": {
+        "index": 1,
+        "mechanism": "position"
+      },
+      "nuclear": {
+        "index": 0,
+        "mechanism": "position"
+      }
+    }
+  },
+  "invocation": {
+    "channels": null,
+    "pixel_size_um": null,
+    "pixel_size_um_assumed": false,
+    "segmentation": "threshold"
+  },
+  "numerics": {
+    "cells": {
+      "area": {
+        "max": 1957.375,
+        "mean": 224.125,
+        "min": 21.625
+      },
+      "centroid_x": {
+        "max": 123.14108910891089,
+        "mean": 61.83028965494833,
+        "min": 5.394736842105263
+      },
+      "centroid_y": {
+        "max": 110.55582524271844,
+        "mean": 57.24831212371164,
+        "min": 12.144308943089431
+      },
+      "convexity": {
+        "max": 1.0,
+        "mean": 0.8646083179183499,
+        "min": 0.027862208713272545
+      },
+      "elongation": {
+        "max": 0.8429613630727906,
+        "mean": 0.6033796302091369,
+        "min": 0.2013491069840415
+      },
+      "elongation_angle": {
+        "mean": 0.006514215046260007,
+        "resultant_length": 0.4869225995660449
+      },
+      "nuclear_angle": {
+        "mean": 0.28478115240589125,
+        "resultant_length": 0.03336816669003593
+      },
+      "nuclear_aspect_ratio": {
+        "max": 2.055061230996848,
+        "mean": 1.331091060590041,
+        "min": 1.0020861295210708
+      },
+      "perimeter": {
+        "max": 754.0446730924156,
+        "mean": 96.53274934368086,
+        "min": 19.192388155425107
+      },
+      "shape_index": {
+        "max": 58.702298185306624,
+        "mean": 6.968645794735163,
+        "min": 3.9131333316443047
+      }
+    },
+    "correlations": {
+      "correlation_length": 22.67327433647577,
+      "g_values": {
+        "max": 0.9958580172910578,
+        "mean": 0.3096408771660866,
+        "min": -0.08024166819244333
+      },
+      "n_bins": 20,
+      "r_bins": {
+        "first": 1.6,
+        "last": 62.400000000000006
+      }
+    },
+    "defects": {
+      "charge_max": 0.5,
+      "charge_min": -0.5,
+      "charge_sum": 2.0
+    },
+    "fields": {
+      "coherence_mean": 0.922690246959254,
+      "coherence_quadrants": {
+        "bottom_left": 0.9460250350680618,
+        "bottom_right": 0.89617630502397,
+        "top_left": 0.9475274643674283,
+        "top_right": 0.9010321833775553
+      },
+      "coherence_std": 0.16602513801127125,
+      "optimal_sigma_mean": 1.3538360595703125,
+      "optimal_sigma_quadrants": {
+        "bottom_left": 1.39990234375,
+        "bottom_right": 1.32208251953125,
+        "top_left": 1.37762451171875,
+        "top_right": 1.31573486328125
+      },
+      "optimal_sigma_std": 1.3081441369309488,
+      "shape": [
+        256,
+        256
+      ],
+      "theta_mean": 3.1403292717104,
+      "theta_quadrants": {
+        "bottom_left": 0.3399647844972605,
+        "bottom_right": 0.07792304245142244,
+        "top_left": 2.8011160190698225,
+        "top_right": 3.064494602080673
+      },
+      "theta_resultant_length": 0.5785010506584152
+    },
+    "frank": {
+      "bend": 809.5637144756963,
+      "ratio": 1.0319200874462422,
+      "splay": 835.4050590350652
+    },
+    "ldg_params": {
+      "a": -0.791294914919915,
+      "b": 0.0,
+      "c": 1.0,
+      "k_elastic": 101.696702018397
+    }
+  },
+  "schema": [
+    "area",
+    "centroid_x",
+    "centroid_y",
+    "convexity",
+    "elongation",
+    "elongation_angle",
+    "label",
+    "nuclear_angle",
+    "nuclear_aspect_ratio",
+    "perimeter",
+    "shape_index"
+  ],
+  "schema_version": "1",
+  "segmentation": {
+    "backend": "threshold",
+    "config": {
+      "min_distance": 5,
+      "min_size": 25,
+      "sigma": 2.0
+    },
+    "mechanism": "explicit",
+    "version": "threshold-1"
+  }
+}
