@@ -21,7 +21,7 @@ mermin takes multi-channel fluorescence microscopy images (TIFF, OME-TIFF, OME-Z
 - **Multiscale structure tensor**: orientation $\theta(\mathbf{x})$ and coherence $C(\mathbf{x})$ fields at logarithmically spaced scales (subcellular to tissue-level)
 - **$k$-atic order parameter fields**: $\psi_k(\mathbf{x}, \sigma) = C \cdot e^{ik\theta}$ for arbitrary $k$
 - **Nuclear ellipse fitting**: aspect ratio and orientation from DAPI masks via moments of inertia
-- **Topological defect detection**: half-integer and integer charge defects via [cartan](https://crates.io/crates/cartan-geo) SO(3) holonomy. Poincar&eacute;--Hopf validation is implemented in `mermin-topo` and exposed to Python, but `analyze()` does not call it yet.
+- **Topological defect detection**: half-integer and integer charge defects via [cartan](https://crates.io/crates/cartan-geo) SO(3) holonomy. Poincar&eacute;--Hopf validation is implemented in `mermin-topo` and exposed to Python, but `analyze()` does not call it yet. Measured against phantom ground truth, detected count and total charge do not correspond to the field's topological content; Analysis Pipeline documents the discrepancy.
 - **Persistent homology**: boundary matrix reduction on Delaunay filtration by ascending alignment magnitude, implemented in `mermin-topo` and exposed to Python; `analyze()` does not call it yet, so `AnalysisResult.persistence` is always empty
 - **Orientational correlation functions**: $G_k(r) = \langle \cos k(\theta_i - \theta_j) \rangle$ with exponential fit for correlation length $\xi_k$
 - **Ripley's $K$-function**: spatial clustering analysis for defect point patterns
@@ -85,6 +85,8 @@ result = mermin.analyze(
 
 print(result.summary())
 # mermin analysis: 847 cells, 12 defects, Frank ratio = 1.31
+# The defect count is the number of windings detect_defects found in the
+# director field, not a physical defect count; see Analysis Pipeline.
 
 # Per-cell measurements as a polars DataFrame
 result.cells.head()
@@ -189,7 +191,17 @@ TIFF, OME-TIFF, OME-Zarr (nuclear + fibre channels)
 ```
 
 `analyze()` returns per-cell shape, orientation, defect, correlation and
-theory measurements. Neighbour-graph construction (`build_neighbor_graph`),
+theory measurements. `detect_defects` reports the windings it finds over the
+discretised director field, and this does not recover the field's
+topological content. On the `radial_defect` phantom, whose construction
+carries one defect of charge +1, it returns 95 detections summing to a total
+charge of +4.5. Merging nearby detections at radii from 3 to 15 pixels does
+not recover the truth either: at every radius tried, the two detections
+nearest the true core sum to a net charge of 0.0. The detector does not
+crash, and each detection's own charge is individually quantised to a
+half-integer multiple of $\pi$, an invariant checked separately; the
+detection count and the summed charge across detections are not physical
+quantities. Neighbour-graph construction (`build_neighbor_graph`),
 Poincar&eacute;--Hopf validation and persistent homology are implemented but not
 yet called from `analyze()`; `AnalysisResult.persistence` is always empty.
 Of stage 6, `analyze()` calls only `orientational_correlation`: Ripley's $K$,

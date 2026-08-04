@@ -14,16 +14,29 @@ dependencies = [
     # outright, so numpy 2 is unavoidable anywhere in this graph: every
     # compiled dependency here must be a numpy-2-built release, not merely
     # one that declares numpy 2 support. numpy>=2.0, scipy>=1.13.0 and
-    # scikit-image>=0.23 are each bisected to the lowest version that
-    # actually imports against numpy 2.0.0 on Python 3.11; the version
+    # scikit-image's numpy-2 floor are each bisected to the lowest version
+    # that actually imports against numpy 2.0.0 on Python 3.11; the version
     # directly below each raises `ValueError: numpy.dtype size changed`
     # (scikit-image 0.22.0) or is outright unresolvable against
     # numpy==2.0.0 (scipy 1.12.0). Do not lower these without re-checking
     # against numpy 2, not against what each project's own advertised floor
     # claims.
+    #
+    # scikit-image's own floor is raised past that numpy-2 bisection to
+    # 0.25 for a second, independent reason: `skimage.segmentation.watershed`
+    # changed its boundary tie-breaking between 0.24 and 0.25. Measured on
+    # both a phantom and real IDR data, 0.23.2 and 0.24.0 agree with each
+    # other, 0.25.2 and 0.26.0 agree with each other, and the two pairs
+    # disagree by a handful of pixels in 65536, always boundary slivers
+    # between adjacent nuclei (peak and label counts never move). At a
+    # floor of 0.23, the threshold backend's determinism holds only within
+    # a version pair, which contradicts the reason that backend exists and
+    # would undermine every golden pinned against it. Do not lower this
+    # without re-checking watershed's boundary tie-breaking, not only that
+    # it imports.
     "numpy>=2.0",
     "polars>=0.20",
-    "scikit-image>=0.23",
+    "scikit-image>=0.25",
     "scipy>=1.13.0",
     "tifffile>=2024.1",
     "bioio>=3.4.0",
