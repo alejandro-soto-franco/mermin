@@ -71,7 +71,23 @@ GOLDEN_ENTRIES: dict[str, dict[str, Any]] = {
     },
 }
 
-_ENVIRONMENT_PACKAGES = ("numpy", "scipy", "scikit-image", "polars", "bioio")
+#: `bioio` itself is a thin dispatcher: `bioio-ome-tiff`, `bioio-ome-zarr`
+#: and `bioio-tifffile` are the reader plugins that actually decide how
+#: pixels are read for the corpus's TIFF, OME-TIFF and OME-Zarr entries, so a
+#: version bump in any one of them can move every downstream number without
+#: `bioio`'s own version changing at all. Recorded alongside `bioio` for the
+#: same reason every other dependency here is: so a bump shows up as an
+#: `environment` difference the next time `--check` runs.
+_ENVIRONMENT_PACKAGES = (
+    "numpy",
+    "scipy",
+    "scikit-image",
+    "polars",
+    "bioio",
+    "bioio-ome-tiff",
+    "bioio-ome-zarr",
+    "bioio-tifffile",
+)
 
 
 def goldens_dir() -> Path:

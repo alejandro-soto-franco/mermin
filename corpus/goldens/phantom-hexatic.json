@@ -7,8 +7,11 @@
   "entry": "phantom-hexatic",
   "environment": {
     "bioio": "3.5.0",
+    "bioio-ome-tiff": "1.4.0",
+    "bioio-ome-zarr": "3.6.0",
+    "bioio-tifffile": "1.3.0",
     "mermin": "0.5.0",
-    "numpy": "2.5.1",
+    "numpy": "2.4.6",
     "polars": "1.43.2",
     "scikit-image": "0.26.0",
     "scipy": "1.18.0"
@@ -40,10 +43,40 @@
         "mean": 276.69625,
         "min": 22.625
       },
+      "centroid_x": {
+        "max": 109.11176470588235,
+        "mean": 49.15023366827862,
+        "min": 2.8666666666666667
+      },
+      "centroid_y": {
+        "max": 110.49311926605505,
+        "mean": 44.253862412396145,
+        "min": 3.5902777777777777
+      },
+      "convexity": {
+        "max": 1.0,
+        "mean": 0.8378884896052073,
+        "min": 0.2583941174733485
+      },
       "elongation": {
         "max": 0.946636237750444,
         "mean": 0.730691571594322,
         "min": 0.29576354668398613
+      },
+      "elongation_angle": {
+        "max": 3.139525101686608,
+        "mean": 1.9972222333224467,
+        "min": 0.0
+      },
+      "nuclear_angle": {
+        "max": 3.1363334749052574,
+        "mean": 1.396267053266468,
+        "min": 0.0
+      },
+      "nuclear_aspect_ratio": {
+        "max": 2.055061230996848,
+        "mean": 1.331091060590041,
+        "min": 1.0020861295210708
       },
       "perimeter": {
         "max": 1072.315396747148,
@@ -69,16 +102,39 @@
         "last": 62.400000000000006
       }
     },
+    "defects": {
+      "charge_max": 0.5,
+      "charge_min": -0.5,
+      "charge_sum": 6.0
+    },
     "fields": {
       "coherence_mean": 0.11708888537643625,
+      "coherence_quadrants": {
+        "bottom_left": 0.07959612456235315,
+        "bottom_right": 0.1545972087806486,
+        "top_left": 0.153082955358083,
+        "top_right": 0.08107925280466027
+      },
       "coherence_std": 0.12261543520571246,
       "optimal_sigma_mean": 1.3194580078125,
+      "optimal_sigma_quadrants": {
+        "bottom_left": 1.20526123046875,
+        "bottom_right": 1.4202880859375,
+        "top_left": 1.4327392578125,
+        "top_right": 1.21954345703125
+      },
       "optimal_sigma_std": 1.6286290753971095,
       "shape": [
         256,
         256
       ],
       "theta_mean": 1.8885110950495596,
+      "theta_quadrants": {
+        "bottom_left": 1.4536370297490713,
+        "bottom_right": 2.30863998464715,
+        "top_left": 2.3103973261787276,
+        "top_right": 1.481370039623289
+      },
       "theta_std": 0.9174984108000142
     },
     "frank": {

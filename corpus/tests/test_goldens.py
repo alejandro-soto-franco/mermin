@@ -17,31 +17,55 @@ from mermin_corpus.goldens import (
 
 
 def fake_result(*, n_cells=3, area_mean=10.0, splay=1.25, corr_len=4.0,
-                 r_bins=(1.0,), g_values=(0.9,)):
+                 r_bins=(1.0,), g_values=(0.9,), defect_charges=(0.5,),
+                 theta=None, coherence=None, optimal_sigma=None):
+    # Every column the real pipeline (`mermin.pipeline.analyze`) puts on
+    # `cells`, not just the four the original golden happened to name.
+    # Values differ per row and per column so a scaling attack on any one
+    # column is detectable in its own min/max/mean rather than accidentally
+    # cancelling.
     cells = pl.DataFrame(
         {
             "label": list(range(1, n_cells + 1)),
+            "centroid_x": [10.0 * (i + 1) for i in range(n_cells)],
+            "centroid_y": [20.0 * (i + 1) for i in range(n_cells)],
             "area": [area_mean] * n_cells,
-            "perimeter": [12.0] * n_cells,
-            "shape_index": [3.8] * n_cells,
-            "elongation": [0.4] * n_cells,
+            "perimeter": [12.0 * (i + 1) for i in range(n_cells)],
+            "shape_index": [3.8 + i for i in range(n_cells)],
+            "convexity": [0.9 - 0.01 * i for i in range(n_cells)],
+            "elongation": [0.4 + 0.01 * i for i in range(n_cells)],
+            "elongation_angle": [0.1 * (i + 1) for i in range(n_cells)],
+            "nuclear_aspect_ratio": [1.2 + 0.05 * i for i in range(n_cells)],
+            "nuclear_angle": [0.2 * (i + 1) for i in range(n_cells)],
         },
         schema={
             "label": pl.Int64,
+            "centroid_x": pl.Float64,
+            "centroid_y": pl.Float64,
             "area": pl.Float64,
             "perimeter": pl.Float64,
             "shape_index": pl.Float64,
+            "convexity": pl.Float64,
             "elongation": pl.Float64,
+            "elongation_angle": pl.Float64,
+            "nuclear_aspect_ratio": pl.Float64,
+            "nuclear_angle": pl.Float64,
         },
     )
+    if theta is None:
+        theta = np.full((8, 8), 0.5)
+    if coherence is None:
+        coherence = np.full((8, 8), 0.25)
+    if optimal_sigma is None:
+        optimal_sigma = np.full((8, 8), 2.0)
     return SimpleNamespace(
         cells=cells,
         fields={
-            "theta": np.full((8, 8), 0.5),
-            "coherence": np.full((8, 8), 0.25),
-            "optimal_sigma": np.full((8, 8), 2.0),
+            "theta": theta,
+            "coherence": coherence,
+            "optimal_sigma": optimal_sigma,
         },
-        defects=[{"position": (1, 1), "charge": 0.5, "angle": 0.0}],
+        defects=[{"position": (1, 1), "charge": c, "angle": 0.0} for c in defect_charges],
         correlations={"correlation_length": corr_len, "r_bins": list(r_bins), "g_values": list(g_values)},
         frank={"splay": splay, "bend": 0.75, "ratio": 1.5},
         ldg_params={"a": 1.0, "b": 2.0, "c": 3.0, "k_elastic": 4.0},
@@ -70,6 +94,25 @@ def record(**kwargs):
     )
 
 
+def record_from(result):
+    return build_record(
+        result,
+        entry="fake-entry",
+        invocation={"segmentation": "threshold", "pixel_size_um": None},
+        environment={"mermin": "0.5.0", "scikit-image": "0.26.0"},
+    )
+
+
+_UNPINNED_CELL_COLUMNS = (
+    "centroid_x",
+    "centroid_y",
+    "convexity",
+    "elongation_angle",
+    "nuclear_aspect_ratio",
+    "nuclear_angle",
+)
+
+
 class TestBuildRecord:
     def test_carries_the_entry_and_schema(self):
         r = record()
@@ -87,6 +130,21 @@ class TestBuildRecord:
         r = record(n_cells=200)
         summary = r["numerics"]["cells"]["area"]
         assert set(summary) == {"min", "max", "mean"}
+
+    def test_every_non_identifier_column_is_summarised(self):
+        """Every column `cells` carries is summarised, not the four the
+        original golden happened to name. `label` is excluded deliberately:
+        it is an arbitrary watershed-assigned integer already pinned exactly
+        by `schema` and `counts.cells`, and its min/max/mean say nothing
+        about the segmentation."""
+        r = record(n_cells=5)
+        summary = r["numerics"]["cells"]
+        assert set(summary) == {
+            "area", "centroid_x", "centroid_y", "convexity", "elongation",
+            "elongation_angle", "nuclear_aspect_ratio", "nuclear_angle",
+            "perimeter", "shape_index",
+        }
+        assert "label" not in summary
 
     def test_round_trips_through_json(self):
         import json
@@ -111,10 +169,21 @@ class TestCompare:
         diffs = compare(record(splay=1.25), record(splay=1.25 * (1 + 1e-9)))
         assert any(d.path == "numerics.frank.splay" for d in diffs)
 
-    def test_a_mask_dependent_quantity_absorbs_a_boundary_pixel(self):
-        """A watershed boundary sliver moving between scikit-image versions
-        must not fail the suite."""
-        assert compare(record(area_mean=10.0), record(area_mean=10.0 * (1 + 1e-5))) == []
+    def test_a_mask_dependent_quantity_absorbs_floating_point_noise(self):
+        """`LOOSE` no longer exists to absorb a scikit-image version-boundary
+        sliver (that scenario sits below the supported `>=0.25.2` floor,
+        where results are bit-exact by measurement); it absorbs the much
+        smaller floating-point non-associativity a different BLAS build or
+        thread count could introduce for an otherwise bit-exact computation."""
+        assert compare(record(area_mean=10.0), record(area_mean=10.0 * (1 + 1e-7))) == []
+
+    def test_a_mask_dependent_quantity_no_longer_absorbs_a_version_boundary_sliver(self):
+        """Mutation evidence for tightening `LOOSE` from `1e-3` to `1e-6`: a
+        1e-5 relative change is representative of the pre-`0.25.2` watershed
+        boundary drift the old tolerance was built to absorb (and did). It
+        no longer passes."""
+        diffs = compare(record(area_mean=10.0), record(area_mean=10.0 * (1 + 1e-5)))
+        assert any(d.path == "numerics.cells.area.mean" for d in diffs)
 
     def test_a_mask_dependent_quantity_still_catches_a_real_change(self):
         diffs = compare(record(area_mean=10.0), record(area_mean=11.0))
@@ -142,6 +211,20 @@ class TestCompare:
         del b["numerics"]["frank"]["splay"]
         diffs = compare(a, b)
         assert any("splay" in d.path for d in diffs)
+
+    def test_a_missing_section_renders_the_sentinel_as_readable(self):
+        """A missing section is the acceptance-critical path: `--check`
+        fails there most often when a golden predates a schema change. The
+        message must read as `<missing>`, not a raw `<object object at
+        0x...>` sentinel address."""
+        a = record()
+        b = record()
+        del b["segmentation"]
+        diffs = compare(a, b)
+        d = next(d for d in diffs if d.path == "segmentation")
+        text = str(d)
+        assert "<missing>" in text
+        assert "object at 0x" not in text
 
     def test_difference_carries_both_values(self):
         diffs = compare(record(n_cells=3), record(n_cells=4))
@@ -206,26 +289,20 @@ class TestSchemaSection:
     def test_the_column_set_is_recorded(self):
         r = record()
         assert r["schema"] == sorted(
-            ["label", "area", "perimeter", "shape_index", "elongation"]
+            [
+                "label", "centroid_x", "centroid_y", "area", "perimeter",
+                "shape_index", "convexity", "elongation", "elongation_angle",
+                "nuclear_aspect_ratio", "nuclear_angle",
+            ]
         )
 
     def test_a_dropped_column_is_a_difference(self):
         """A column vanishing from `cells` on both sides is invisible to the
         per-column summary loop, so the column list itself must be pinned."""
-        a = build_record(
-            fake_result(),
-            entry="fake-entry",
-            invocation={"segmentation": "threshold", "pixel_size_um": None},
-            environment={"mermin": "0.5.0", "scikit-image": "0.26.0"},
-        )
+        a = record_from(fake_result())
         result = fake_result()
         result.cells = result.cells.drop("elongation")
-        b = build_record(
-            result,
-            entry="fake-entry",
-            invocation={"segmentation": "threshold", "pixel_size_um": None},
-            environment={"mermin": "0.5.0", "scikit-image": "0.26.0"},
-        )
+        b = record_from(result)
         diffs = compare(a, b)
         assert any(d.path == "schema" for d in diffs)
 
@@ -261,3 +338,114 @@ class TestCorrelationCurve:
         paths = {d.path for d in diffs}
         assert "numerics.correlations.g_values" in paths
         assert "numerics.correlations.r_bins" in paths
+
+
+class TestCellColumnCoverage:
+    """Reviewer's own attack: scaling `label`, `centroid_x`, `centroid_y`,
+    `convexity`, `elongation_angle`, `nuclear_aspect_ratio` and
+    `nuclear_angle` by -7 produced no differences at all, because only
+    `area`, `perimeter`, `shape_index` and `elongation` were summarised.
+    `nuclear_aspect_ratio` and `nuclear_angle` are an advertised README
+    feature."""
+
+    @pytest.mark.parametrize("column", _UNPINNED_CELL_COLUMNS)
+    def test_scaling_a_previously_unpinned_column_is_a_difference(self, column):
+        a = record(n_cells=5)
+        mutated = fake_result(n_cells=5)
+        mutated.cells = mutated.cells.with_columns((pl.col(column) * -7).alias(column))
+        b = record_from(mutated)
+        diffs = compare(a, b)
+        assert any(d.path.startswith(f"numerics.cells.{column}.") for d in diffs)
+
+    def test_scaling_label_changes_nothing(self):
+        """`label` is deliberately excluded from the numeric summary: it is
+        an arbitrary watershed-assigned identifier, already pinned exactly
+        by `schema` and `counts.cells`, and its min/max/mean carry no
+        segmentation information. Scaling it must not manufacture a
+        difference where the actual measurements are unchanged."""
+        a = record(n_cells=5)
+        mutated = fake_result(n_cells=5)
+        mutated.cells = mutated.cells.with_columns((pl.col("label") * -7).alias("label"))
+        b = record_from(mutated)
+        diffs = compare(a, b)
+        assert diffs == []
+
+
+class TestFieldQuadrants:
+    """Reviewer's own attack: reversing `theta`/`coherence`/`optimal_sigma`
+    with `[::-1, ::-1]` left the whole-field mean and standard deviation
+    unchanged, so the comparison passed at `TIGHT` with zero differences
+    even though every value moved to a different pixel."""
+
+    def _asymmetric_fields(self):
+        base = np.arange(64, dtype=float).reshape(8, 8)
+        return base * 0.01, base * 0.02 + 0.1, base * 0.03 + 1.0
+
+    def test_quadrant_means_are_recorded(self):
+        theta, coherence, optimal_sigma = self._asymmetric_fields()
+        r = record(theta=theta, coherence=coherence, optimal_sigma=optimal_sigma)
+        quadrants = r["numerics"]["fields"]["theta_quadrants"]
+        assert set(quadrants) == {"top_left", "top_right", "bottom_left", "bottom_right"}
+        assert quadrants["top_left"] != quadrants["bottom_right"]
+
+    def test_reversing_a_field_spatially_is_a_difference(self):
+        theta, coherence, optimal_sigma = self._asymmetric_fields()
+        a = record(theta=theta, coherence=coherence, optimal_sigma=optimal_sigma)
+        b = record(
+            theta=theta[::-1, ::-1],
+            coherence=coherence[::-1, ::-1],
+            optimal_sigma=optimal_sigma[::-1, ::-1],
+        )
+        assert a["numerics"]["fields"]["theta_mean"] == b["numerics"]["fields"]["theta_mean"]
+        assert a["numerics"]["fields"]["theta_std"] == b["numerics"]["fields"]["theta_std"]
+        diffs = compare(a, b)
+        paths = {d.path for d in diffs}
+        assert any("_quadrants" in p for p in paths)
+
+
+class TestDefectCharges:
+    """Reviewer's own attack: negating every detected charge on
+    `phantom-radial` and rebuilding the record produced zero differences,
+    because only `counts.defects` (a count, not a charge) was pinned."""
+
+    def test_charge_sum_min_and_max_are_recorded(self):
+        r = record(defect_charges=(0.5, -0.5, 1.0))
+        assert r["numerics"]["defects"] == {
+            "charge_sum": 1.0,
+            "charge_min": -0.5,
+            "charge_max": 1.0,
+        }
+
+    def test_zero_defects_records_a_zero_sum_and_null_extrema(self):
+        r = record(defect_charges=())
+        assert r["numerics"]["defects"] == {
+            "charge_sum": 0.0,
+            "charge_min": None,
+            "charge_max": None,
+        }
+
+    def test_negating_every_charge_is_a_difference(self):
+        a = record(defect_charges=(0.5, -0.5, 0.5, 0.5))
+        b = record(defect_charges=(-0.5, 0.5, -0.5, -0.5))
+        diffs = compare(a, b)
+        assert any(d.path == "numerics.defects.charge_sum" for d in diffs)
+
+    def test_a_changed_charge_with_an_unchanged_count_is_a_difference(self):
+        """`counts.defects` alone would not catch this: the same number of
+        defects, one different value."""
+        a = record(defect_charges=(0.5, -0.5, 0.5))
+        b = record(defect_charges=(0.5, -0.5, 1.0))
+        diffs = compare(a, b)
+        assert "counts.defects" not in {d.path for d in diffs}
+        assert any(d.path == "numerics.defects.charge_max" for d in diffs)
+
+    def test_charge_content_is_compared_exactly_not_under_a_tolerance(self):
+        """A relative difference far below `LOOSE`, and even below `TIGHT`,
+        must still fail: charge is discrete and quantised, so there is no
+        boundary-pixel noise here for a tolerance to absorb."""
+        a = record(defect_charges=(0.5,))
+        b = record(defect_charges=(0.5 * (1 + 1e-13),))
+        diffs = compare(a, b)
+        matches = [d for d in diffs if d.path == "numerics.defects.charge_max"]
+        assert matches
+        assert matches[0].tolerance is None
