@@ -151,6 +151,39 @@ def test_analyze_and_experiment_reachable_from_package_root():
     assert "Experiment" in mermin.__all__
 
 
+def test_every_name_in_all_is_reachable_via_getattr():
+    """`__init__.py` declares `__all__` and resolves each name lazily through
+    `__getattr__`. A name present in one and missing from the other raises
+    AttributeError only when something actually asks for it, so this walks
+    every declared name rather than trusting the two lists agree by
+    inspection."""
+    import mermin
+
+    failures = {}
+    for name in mermin.__all__:
+        try:
+            getattr(mermin, name)
+        except AttributeError as error:
+            failures[name] = str(error)
+    assert not failures, failures
+
+
+def test_the_all_getattr_check_actually_catches_a_missing_branch(monkeypatch):
+    """Proves the check above has teeth: a name added to `__all__` with no
+    matching `__getattr__` branch must fail it, not pass silently."""
+    import mermin
+
+    monkeypatch.setattr(mermin, "__all__", [*mermin.__all__, "NotARealMerminName"])
+
+    failures = {}
+    for name in mermin.__all__:
+        try:
+            getattr(mermin, name)
+        except AttributeError as error:
+            failures[name] = str(error)
+    assert "NotARealMerminName" in failures
+
+
 def test_summary_omits_internal_katic_when_the_column_is_absent():
     # `analyze()` never constructs `internal_katic_k2`, so `summary()` used
     # to report a mean of exactly 0.000 unconditionally, misleadingly
