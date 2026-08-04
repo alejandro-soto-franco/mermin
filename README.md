@@ -103,6 +103,19 @@ comparison = experiment.run()
 comparison.report("output/")
 ```
 
+## Breaking changes (0.5.0)
+
+- `cellpose_diameter` is removed from `analyze()`. Backend parameters now
+  live on the backend itself: `segmentation=mermin.backends.CellposeBackend(diameter=30.0)`.
+- Cellpose is no longer a base dependency. It is the optional extra
+  `mermin[cellpose]`, and must be version 4 or newer. Without it,
+  segmentation runs on the threshold backend and a warning names the
+  fallback.
+- Python 3.10 is no longer supported. The minimum is 3.11, because
+  `bioio-ome-zarr` requires it in every release mermin can build against.
+- `analyze()` gains `segmentation` and `mask_cache` parameters, and
+  `AnalysisResult` gains `segmentation`, recording which backend ran.
+
 ## Breaking changes (0.4.0)
 
 - `channels` maps roles to channel indices, not channel names to indices.
@@ -189,7 +202,7 @@ estimation is implemented in `mermin-theory` and exposed to Python, but
 
 ## Three Independent $k$-atic Measurements
 
-mermin's Rust crates compute three independent orientational measurements per cell, each with distinct physical meaning. In 0.4.0, `analyze()` does not yet assemble any of the three into its per-cell `cells` table: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, from which a caller can derive them directly.
+mermin's Rust crates compute three independent orientational measurements per cell, each with distinct physical meaning. In 0.5.0, `analyze()` does not yet assemble any of the three into its per-cell `cells` table: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, from which a caller can derive them directly.
 
 | Measurement | Source | What it captures |
 |-------------|--------|-----------------|
