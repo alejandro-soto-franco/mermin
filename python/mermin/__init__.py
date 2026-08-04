@@ -11,7 +11,7 @@ try:
 except PackageNotFoundError:
     # Not installed, e.g. this checkout on `sys.path` with no wheel built.
     # Kept in step with `[workspace.package] version` in Cargo.toml by hand.
-    __version__ = "0.4.0"
+    __version__ = "0.5.0"
 
 __all__ = [
     "open_image",
@@ -21,9 +21,16 @@ __all__ = [
     "AmbiguousRoleError",
     "UnresolvableRoleError",
     "segment_nuclei",
+    "segment_nuclei_with_provenance",
     "segment_cell_bodies",
     "extract_contours",
     "build_neighbor_graph",
+    "SegmentationBackend",
+    "ThresholdBackend",
+    "CellposeBackend",
+    "resolve_backend",
+    "SegmentationError",
+    "BackendUnavailableError",
     "analyze",
     "Experiment",
 ]
@@ -37,15 +44,33 @@ def __getattr__(name: str):
     elif name == "MerminError":
         from mermin.errors import MerminError
         return MerminError
+    elif name in ("SegmentationError", "BackendUnavailableError"):
+        from mermin.errors import BackendUnavailableError, SegmentationError
+        return locals()[name]
     elif name in ("RoleError", "AmbiguousRoleError", "UnresolvableRoleError"):
         from mermin.roles import AmbiguousRoleError, RoleError, UnresolvableRoleError
         return locals()[name]
-    elif name in ("segment_nuclei", "segment_cell_bodies", "extract_contours", "build_neighbor_graph"):
+    elif name in (
+        "segment_nuclei",
+        "segment_nuclei_with_provenance",
+        "segment_cell_bodies",
+        "extract_contours",
+        "build_neighbor_graph",
+    ):
         from mermin.segment import (
             segment_nuclei,
+            segment_nuclei_with_provenance,
             segment_cell_bodies,
             extract_contours,
             build_neighbor_graph,
+        )
+        return locals()[name]
+    elif name in ("SegmentationBackend", "ThresholdBackend", "CellposeBackend", "resolve_backend"):
+        from mermin.backends import (
+            CellposeBackend,
+            SegmentationBackend,
+            ThresholdBackend,
+            resolve_backend,
         )
         return locals()[name]
     elif name in ("analyze", "Experiment"):

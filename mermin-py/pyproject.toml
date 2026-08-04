@@ -6,26 +6,41 @@ build-backend = "maturin"
 name = "mermin"
 dynamic = ["version"]
 description = "k-atic alignment analysis of fluorescence microscopy"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Alejandro Soto Franco" }]
 dependencies = [
-    "numpy>=1.24",
+    # bioio-ome-zarr below pulls in zarr>=3.1.0, which requires numpy>=2.0
+    # outright, so numpy 2 is unavoidable anywhere in this graph: every
+    # compiled dependency here must be a numpy-2-built release, not merely
+    # one that declares numpy 2 support. numpy>=2.0, scipy>=1.13.0 and
+    # scikit-image>=0.23 are each bisected to the lowest version that
+    # actually imports against numpy 2.0.0 on Python 3.11; the version
+    # directly below each raises `ValueError: numpy.dtype size changed`
+    # (scikit-image 0.22.0) or is outright unresolvable against
+    # numpy==2.0.0 (scipy 1.12.0). Do not lower these without re-checking
+    # against numpy 2, not against what each project's own advertised floor
+    # claims.
+    "numpy>=2.0",
     "polars>=0.20",
-    "cellpose>=3.0",
-    "scikit-image>=0.22",
-    "scipy>=1.12",
-    "matplotlib>=3.8",
+    "scikit-image>=0.23",
+    "scipy>=1.13.0",
     "tifffile>=2024.1",
-    "bioio>=3.0",
+    "bioio>=3.4.0",
     "bioio-ome-tiff>=1.0",
-    "bioio-ome-zarr>=2.0",
-    "bioio-tifffile>=1.0",
+    # 2.0.0-3.0.0 pass a `storage_options` kwarg to `zarr.open_group` even
+    # when empty; zarr>=3.3 raises TypeError for a non-URI path in that
+    # case, which `_is_supported_image`'s bare `except Exception` swallows,
+    # so every local OME-Zarr read reports as "unsupported" rather than
+    # erroring. Fixed in 3.0.1; do not lower this without re-checking that.
+    "bioio-ome-zarr>=3.0.1",
+    "bioio-tifffile>=1.3.0",
     "fsspec>=2024.12.0",
 ]
 
 [project.optional-dependencies]
-vendor-formats = ["bioio-czi>=2.0", "bioio-lif>=2.0", "bioio-nd2>=2.0"]
+cellpose = ["cellpose>=4.0,<5"]
+vendor-formats = ["bioio-czi>=2.0", "bioio-lif>=1.5", "bioio-nd2>=2.0"]
 
 [tool.maturin]
 python-source = "../python"

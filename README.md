@@ -40,13 +40,23 @@ mermin takes multi-channel fluorescence microscopy images (TIFF, OME-TIFF, OME-Z
 pip install mermin
 ```
 
-Requires Python 3.10+. The Rust extension is compiled automatically via [maturin](https://www.maturin.rs/).
+Segmentation runs on a threshold and watershed backend by default, which needs
+no extra dependency and is deterministic. Cellpose 4 is optional:
+
+    uv add "mermin[cellpose]"
+
+It brings torch, torchvision and a model checkpoint downloaded on first use.
+With it installed, `mermin.analyze` selects it; without it, the threshold
+backend runs and a warning names the fallback. Pass `segmentation="threshold"`
+to choose it outright and silence the warning.
+
+Requires Python 3.11+. The Rust extension is compiled automatically via [maturin](https://www.maturin.rs/).
 
 ### Rust (for library use)
 
 ```toml
 [dependencies]
-mermin = "0.4"
+mermin = "0.5"
 ```
 
 ### Build from source
@@ -92,6 +102,19 @@ experiment.add_condition("tgfb1", ["d07.tif", "d08.tif", "d09.tif"])
 comparison = experiment.run()
 comparison.report("output/")
 ```
+
+## Breaking changes (0.5.0)
+
+- `cellpose_diameter` is removed from `analyze()`. Backend parameters now
+  live on the backend itself: `segmentation=mermin.backends.CellposeBackend(diameter=30.0)`.
+- Cellpose is no longer a base dependency. It is the optional extra
+  `mermin[cellpose]`, and must be version 4 or newer. Without it,
+  segmentation runs on the threshold backend and a warning names the
+  fallback.
+- Python 3.10 is no longer supported. The minimum is 3.11, because
+  `bioio-ome-zarr` requires it in every release mermin can build against.
+- `analyze()` gains `segmentation` and `mask_cache` parameters, and
+  `AnalysisResult` gains `segmentation`, recording which backend ran.
 
 ## Breaking changes (0.4.0)
 
@@ -149,7 +172,7 @@ TIFF, OME-TIFF, OME-Zarr (nuclear + fibre channels)
   |
   +-- 1. Preprocessing ---- percentile contrast normalisation
   |
-  +-- 2. Segmentation ----- Cellpose (nuclei), watershed (cell bodies)
+  +-- 2. Segmentation ----- backend protocol (nuclei), watershed (cell bodies)
   |
   +-- 3. Shape analysis ---- Minkowski tensors, Fourier modes, morphometrics
   |
@@ -179,7 +202,7 @@ estimation is implemented in `mermin-theory` and exposed to Python, but
 
 ## Three Independent $k$-atic Measurements
 
-mermin's Rust crates compute three independent orientational measurements per cell, each with distinct physical meaning. In 0.4.0, `analyze()` does not yet assemble any of the three into its per-cell `cells` table: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, from which a caller can derive them directly.
+mermin's Rust crates compute three independent orientational measurements per cell, each with distinct physical meaning. In 0.5.0, `analyze()` does not yet assemble any of the three into its per-cell `cells` table: `result.fields["theta"]` and `result.fields["coherence"]` hold the underlying orientation field, and `result.correlations` holds the population-level $G_k(r)$, from which a caller can derive them directly.
 
 | Measurement | Source | What it captures |
 |-------------|--------|-----------------|
@@ -214,7 +237,7 @@ mermin builds on the [cartan](https://crates.io/crates/cartan) ecosystem for dif
 - **cartan-geo**: holonomy-based topological defect detection
 - **cartan-optim**: Riemannian trust region for Landau-de Gennes fitting
 
-Python dependencies: numpy, polars, cellpose, scikit-image, scipy, matplotlib, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O.
+Python dependencies: numpy, polars, scikit-image, scipy, tifffile, and [bioio](https://github.com/bioio-devs/bioio) (with the `bioio-ome-tiff`, `bioio-ome-zarr` and `bioio-tifffile` plugins) for file I/O. Cellpose 4 is an optional extra, `mermin[cellpose]`.
 
 ## License
 

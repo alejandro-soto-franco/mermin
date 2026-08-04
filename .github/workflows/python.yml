@@ -23,6 +23,7 @@ on:
       - 'mermin-stats/**'
       - 'mermin-theory/**'
       - 'python/**'
+      - '.github/workflows/python.yml'
 
 env:
   CARGO_TERM_COLOR: always
@@ -30,6 +31,75 @@ env:
   PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
 
 jobs:
+  extras-resolve:
+    name: Optional-dependency extras resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
+      - name: Resolve every declared optional-dependency group
+        run: |
+          cd mermin-py
+          status=0
+          for extra in $(python3 -c "
+          import tomllib
+          d = tomllib.load(open('pyproject.toml', 'rb'))
+          print(' '.join(d['project']['optional-dependencies']))
+          "); do
+            echo "::group::Resolving extra '$extra'"
+            if uv pip compile pyproject.toml --extra "$extra" -o "$(mktemp)"; then
+              echo "extra '$extra' resolves"
+            else
+              echo "extra '$extra' does not resolve"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
+  floors:
+    name: Lowest declared dependency floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: floors
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install uv
+        run: pip install uv
+      - name: Install mermin at the lowest declared floors, not the highest
+        # Every other job resolves highest, so a wrong or missing floor
+        # still passes CI: that is how fsspec>=2024.12.0 went missing from
+        # 0.4.0 unnoticed. `--resolution lowest-direct` installs mermin's
+        # own dependencies at their declared floor versions (not their
+        # transitive dependencies, which `lowest` would drag down for
+        # unrelated reasons and fail to resolve). Runs on 3.11, the oldest
+        # Python mermin now declares support for: numpy/scipy/scikit-image's
+        # floors predate Python 3.13 wheels, so 3.13 here previously
+        # produced source-build failures that were about the CI
+        # interpreter, not about mermin's own floors.
+        run: |
+          cd mermin-py
+          uv venv .venv --python 3.11
+          uv pip install --python .venv/bin/python --resolution lowest-direct -e .
+          uv pip install --python .venv/bin/python pytest
+      - name: Verify the build actually works at the floors
+        # An import proves almost nothing: the fsspec floor's own failure
+        # imported cleanly and only broke on reading a file. Run a slice
+        # that exercises real image I/O and the compiled pipeline.
+        run: |
+          source mermin-py/.venv/bin/activate
+          python -c "import mermin; from mermin._native import analyze_shape; print('mermin', mermin.__version__, 'built and imported at the lowest declared floors')"
+          pytest tests/ -v --tb=short -m "not corpus"
+
   rust-check:
     name: Rust compile check (mermin-py)
     runs-on: ubuntu-latest
@@ -47,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
 
@@ -61,14 +131,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Create virtualenv and install deps
+      - name: Create virtualenv and install build/test tooling
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin pytest numpy scipy polars tifffile scikit-image \
-            bioio bioio-ome-tiff bioio-ome-zarr bioio-tifffile "fsspec>=2024.12.0"
+          pip install maturin pytest
 
       - name: Build and install (dev mode)
+        # maturin installs mermin's own declared dependencies from
+        # mermin-py/pyproject.toml as part of this step, so nothing beyond
+        # the build/test tooling above needs installing by hand: a
+        # hand-maintained list beside pyproject.toml only drifts from it.
         run: |
           source .venv/bin/activate
           cd mermin-py
@@ -79,10 +152,114 @@ jobs:
           source .venv/bin/activate
           python -c "from mermin._native import analyze_shape; print('mermin._native loaded')"
 
+      - name: Assert the test environment is cellpose free
+        run: |
+          source .venv/bin/activate
+          PYTHONPATH=python python -c "
+          import importlib.util, sys
+          assert importlib.util.find_spec('cellpose') is None, 'cellpose leaked into the hermetic environment'
+          import mermin.backends
+          assert 'cellpose' not in sys.modules, 'mermin.backends imported cellpose'
+          assert 'torch' not in sys.modules, 'mermin.backends pulled torch'
+          print('hermetic: cellpose absent, backends import clean')
+          "
+
       - name: Run tests
         run: |
           source .venv/bin/activate
           pytest tests/ -v --tb=short -m "not corpus"
+
+  cellpose-hermetic:
+    name: Cellpose backend (real cellpose, no corpus volume)
+    runs-on: ubuntu-latest
+    needs: rust-check
+    # A sibling of python-tests, not a dependent of it: this job's own cost
+    # (a ~1.2 GB checkpoint on a cache miss, then real model inference) must
+    # not sit on the matrix's critical path, so it starts as soon as
+    # rust-check clears rather than waiting on python-tests to finish.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cellpose-hermetic
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache the cellpose model checkpoint
+        # cellpose/models.py resolves the checkpoint directory from
+        # CELLPOSE_LOCAL_MODELS_PATH, defaulting to ~/.cellpose/models when
+        # unset, which is the default this job runs at. The checkpoint does
+        # not depend on anything in this repository, so the key is the
+        # cellpose extra's own pin; a cache hit skips the download entirely.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cellpose/models
+          key: cellpose-models-cpsam_v2-${{ hashFiles('mermin-py/pyproject.toml') }}
+          restore-keys: |
+            cellpose-models-cpsam_v2-
+
+      - name: Create virtualenv and install build/test tooling
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install maturin pytest
+
+      - name: Build and install with the cellpose extra
+        # `-E cellpose` installs cellpose through mermin's own declared
+        # optional-dependency extra (cellpose>=4.0,<5), rather than naming
+        # cellpose here directly, so an extra that stops resolving, or whose
+        # floor stops being the version the wrapper needs, fails this step.
+        run: |
+          source .venv/bin/activate
+          cd mermin-py
+          maturin develop --release -E cellpose
+
+      - name: Confirm cellpose actually installed
+        # A cellpose that silently failed to install would make the test
+        # below skip rather than run, which would report green while
+        # testing nothing. Fail here first, with a clear cause, if that ever
+        # happens. importlib.metadata, not cellpose.version.version: cellpose
+        # itself does not have a version submodule, `cellpose.version` is
+        # already the version string, and this check must not repeat the
+        # unexecuted-assertion mistake it exists to catch.
+        run: |
+          source .venv/bin/activate
+          python -c "
+          import importlib.metadata
+          print('cellpose', importlib.metadata.version('cellpose'), 'importable')
+          "
+
+      - name: Run the real cellpose backend test
+        # Not `-m "not corpus"`: this file carries no corpus mark and is the
+        # entire point of this job. Cellpose being importable, its skipif
+        # does not fire and the test genuinely runs `CellposeBackend.segment`
+        # against a synthetic image.
+        #
+        # `pipefail` catches a genuine failure or error (nonzero pytest
+        # exit). The `skipped` check below catches the other way this can
+        # go green while testing nothing: the test skipping regardless, in
+        # which case pytest itself still exits 0. This checks the property
+        # the job actually needs - that the test ran, not that it skipped -
+        # rather than counting passes, which breaks the moment a third test
+        # is added to the file and, worse, on pytest's own summary-line
+        # padding (`===...=== 2 passed ...===...===` never begins a line
+        # with `2 passed`, so an anchored count match here would fail
+        # unconditionally on every run, including a good one; verified
+        # against real pytest output before landing this, not reasoned
+        # about).
+        run: |
+          source .venv/bin/activate
+          set -o pipefail
+          pytest tests/test_cellpose_backend.py -v --tb=short -rs | tee /tmp/cellpose-test.log
+          if grep -qi "skipped" /tmp/cellpose-test.log; then
+            echo "the cellpose test skipped in a job that installed cellpose"
+            exit 1
+          fi
 
   wheel-smoke:
     name: Wheel smoke test

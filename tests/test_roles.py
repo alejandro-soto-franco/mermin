@@ -2,6 +2,7 @@ import pytest
 
 from mermin.roles import (
     AmbiguousRoleError,
+    RoleError,
     UnresolvableRoleError,
     resolve_roles,
 )
@@ -12,6 +13,29 @@ def test_explicit_mapping_wins_outright():
     assert r["nuclear"].index == 1
     assert r["fibre"].index == 0
     assert r["nuclear"].mechanism == "explicit"
+
+
+def test_explicit_mapping_rejects_an_out_of_range_index():
+    # A file that reads back with fewer channels than the caller expects
+    # must not raise a bare IndexError from downstream plane selection;
+    # `mermin.MerminError` is documented to catch everything `analyze` and
+    # `open_image` raise, which was false for this path.
+    with pytest.raises(RoleError, match="fibre.*channel 1.*only 1 channel"):
+        resolve_roles(["Dapi"], [], explicit={"nuclear": 0, "fibre": 1})
+
+
+def test_explicit_mapping_rejects_a_negative_index():
+    # A negative index binds silently to the last channel via Python/numpy
+    # wraparound rather than raising, which is worse than an out-of-range
+    # error: on a one-channel file it collides two roles onto the same
+    # plane with no warning at all.
+    with pytest.raises(RoleError, match="fibre.*channel -1"):
+        resolve_roles(["Dapi", "Vimentin"], [], explicit={"nuclear": 0, "fibre": -1})
+
+
+def test_explicit_mapping_rejects_two_roles_at_the_same_index():
+    with pytest.raises(RoleError, match="both roles to one channel"):
+        resolve_roles(["Dapi"], [], explicit={"nuclear": 0, "fibre": 0})
 
 
 def test_vocabulary_matches_case_insensitively():

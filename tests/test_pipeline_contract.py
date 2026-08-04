@@ -110,7 +110,9 @@ def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
     """`Experiment.run()` used to call `analyze(p, pixel_size_um=...)` and
     stop, so a file needing an explicit channel mapping, or a non-default
     Z/T selection, was unreachable from the batch API. Assert every one of
-    the four fields actually reaches `analyze` for every path in the batch.
+    the six fields actually reaches `analyze` for every path in the batch,
+    including `segmentation` and `mask_cache`: `run()` passes both, and
+    nothing checked it, so deleting either line still left the suite green.
     """
     import mermin.pipeline as pipeline_module
 
@@ -128,6 +130,8 @@ def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
         projection="max",
         z=2,
         t=1,
+        segmentation="threshold",
+        mask_cache="/tmp/mask-cache",
     )
     experiment.add_condition("ctrl", ["a.tif", "b.tif"])
     experiment.run()
@@ -139,6 +143,8 @@ def test_experiment_run_passes_channels_projection_z_t_to_analyze(monkeypatch):
         assert kwargs["projection"] == "max"
         assert kwargs["z"] == 2
         assert kwargs["t"] == 1
+        assert kwargs["segmentation"] == "threshold"
+        assert kwargs["mask_cache"] == "/tmp/mask-cache"
 
 
 def test_analyze_and_experiment_reachable_from_package_root():
@@ -149,6 +155,39 @@ def test_analyze_and_experiment_reachable_from_package_root():
     assert mermin.Experiment is Experiment
     assert "analyze" in mermin.__all__
     assert "Experiment" in mermin.__all__
+
+
+def test_every_name_in_all_is_reachable_via_getattr():
+    """`__init__.py` declares `__all__` and resolves each name lazily through
+    `__getattr__`. A name present in one and missing from the other raises
+    AttributeError only when something actually asks for it, so this walks
+    every declared name rather than trusting the two lists agree by
+    inspection."""
+    import mermin
+
+    failures = {}
+    for name in mermin.__all__:
+        try:
+            getattr(mermin, name)
+        except AttributeError as error:
+            failures[name] = str(error)
+    assert not failures, failures
+
+
+def test_the_all_getattr_check_actually_catches_a_missing_branch(monkeypatch):
+    """Proves the check above has teeth: a name added to `__all__` with no
+    matching `__getattr__` branch must fail it, not pass silently."""
+    import mermin
+
+    monkeypatch.setattr(mermin, "__all__", [*mermin.__all__, "NotARealMerminName"])
+
+    failures = {}
+    for name in mermin.__all__:
+        try:
+            getattr(mermin, name)
+        except AttributeError as error:
+            failures[name] = str(error)
+    assert "NotARealMerminName" in failures
 
 
 def test_summary_omits_internal_katic_when_the_column_is_absent():
@@ -168,6 +207,7 @@ def test_summary_omits_internal_katic_when_the_column_is_absent():
         ldg_params={},
         persistence={"pairs": []},
         ingest={},
+        segmentation={},
     )
     summary = result.summary()
     assert "psi_2" not in summary
@@ -189,8 +229,41 @@ def test_summary_reports_internal_katic_when_the_column_is_present():
         ldg_params={},
         persistence={"pairs": []},
         ingest={},
+        segmentation={},
     )
     assert "mean |psi_2| = 0.500" in result.summary()
+
+
+def test_analyze_takes_segmentation_and_mask_cache():
+    from mermin.pipeline import analyze
+
+    parameters = inspect.signature(analyze).parameters
+    assert parameters["segmentation"].default == "auto"
+    assert parameters["mask_cache"].default is None
+
+
+def test_analyze_no_longer_takes_cellpose_diameter():
+    """Removed rather than deprecated: backend parameters belong on the
+    backend."""
+    from mermin.pipeline import analyze
+
+    assert "cellpose_diameter" not in inspect.signature(analyze).parameters
+
+
+def test_experiment_carries_the_segmentation_settings():
+    from mermin.pipeline import Experiment
+
+    experiment = Experiment()
+    assert experiment.segmentation == "auto"
+    assert experiment.mask_cache is None
+
+
+def test_analysis_result_carries_segmentation_provenance():
+    from dataclasses import fields
+
+    from mermin.pipeline import AnalysisResult
+
+    assert "segmentation" in {f.name for f in fields(AnalysisResult)}
 
 
 def test_bare_import_needs_nothing_heavy():

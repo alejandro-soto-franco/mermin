@@ -101,12 +101,24 @@ def resolve_roles(
     explicit: dict[str, int] | None = None,
 ) -> dict[str, RoleResolution]:
     """Assign `nuclear` and `fibre` to distinct channel indices."""
+    channel_count = len(channel_names)
     if explicit:
         missing = {"nuclear", "fibre"} - set(explicit)
         if missing:
             raise RoleError(f"explicit mapping is missing {sorted(missing)}")
         if explicit["nuclear"] == explicit["fibre"]:
             raise RoleError("explicit mapping assigns both roles to one channel")
+        for role, index in explicit.items():
+            if index < 0:
+                raise RoleError(
+                    f"explicit mapping assigns {role!r} to channel {index}, "
+                    f"but negative channel indices are not accepted"
+                )
+            if index >= channel_count:
+                raise RoleError(
+                    f"explicit mapping assigns {role!r} to channel {index}, "
+                    f"but only {channel_count} channel(s) are present"
+                )
         return {
             role: RoleResolution(role, index, "explicit", "caller supplied")
             for role, index in explicit.items()

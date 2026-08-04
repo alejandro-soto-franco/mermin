@@ -36,8 +36,12 @@ def test_missing_pixel_size_raises_rather_than_defaulting(tmp_path):
 
 
 def test_planes_are_native_endian_float64(tmp_path):
-    p = tmp_path / "be.tif"
-    tifffile.imwrite(p, np.zeros((2, 16, 16), dtype=">f4"))
+    # A bare `tifffile.imwrite` with no axes metadata reads back through
+    # bioio as a single channel with a Z extent of 2, not two channels, so
+    # this must go through `_write` like every other fixture here: without
+    # it, `channels={"fibre": 1}` names a channel that does not exist and
+    # role resolution now rejects it rather than reading the wrong plane.
+    p = _write(tmp_path / "be.tif", np.zeros((2, 16, 16), dtype=">f4"))
     img = open_image(p, channels={"nuclear": 0, "fibre": 1}, pixel_size_um=1.0)
     for plane in img.planes.values():
         assert plane.dtype == np.float64
