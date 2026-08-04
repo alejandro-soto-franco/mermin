@@ -13,7 +13,7 @@ from mermin.segment import (
     build_neighbor_graph,
     extract_contours,
     segment_cell_bodies,
-    segment_nuclei,
+    segment_nuclei_with_provenance,
 )
 
 
@@ -47,6 +47,7 @@ class AnalysisResult:
     ldg_params: dict[str, float]
     persistence: dict[str, Any]
     ingest: dict[str, Any]
+    segmentation: dict[str, Any]
 
     def summary(self) -> str:
         n = len(self.cells)
@@ -73,7 +74,8 @@ def analyze(
     t: int = 0,
     k_values: list[int] | None = None,
     structure_tensor_scales: list[float] | None = None,
-    cellpose_diameter: float | None = None,
+    segmentation: str | Any = "auto",
+    mask_cache: str | Path | None = None,
 ) -> AnalysisResult:
     """Run the full mermin analysis pipeline on a single image.
 
@@ -89,7 +91,11 @@ def analyze(
         k_values: k-atic symmetry orders to analyze. Default: [1, 2, 4, 6].
         structure_tensor_scales: Gaussian sigma values in pixels.
             Default: [1, 2, 4, 8, 16, 32].
-        cellpose_diameter: Nuclear diameter for Cellpose. None for auto.
+        segmentation: Nuclear segmentation backend: "auto", "cellpose",
+            "threshold", or a `mermin.backends.SegmentationBackend`. "auto"
+            uses cellpose when it is installed and warns when it falls back.
+        mask_cache: Directory for cached nuclear masks, keyed by plane content
+            and backend configuration. None caches nothing.
 
     Returns:
         AnalysisResult with all measurements.
@@ -115,7 +121,9 @@ def analyze(
     vimentin = loaded.planes["fibre"]
 
     # Stage 2: Segmentation
-    nuclear_mask = segment_nuclei(dapi, diameter=cellpose_diameter)
+    nuclear_mask, segmentation_provenance = segment_nuclei_with_provenance(
+        dapi, segmentation, mask_cache=mask_cache
+    )
     cell_mask = segment_cell_bodies(vimentin, nuclear_mask)
     contours = extract_contours(cell_mask, pixel_size_um)
 
@@ -221,6 +229,7 @@ def analyze(
         ldg_params=ldg,
         persistence=persistence,
         ingest=_ingest_provenance(loaded),
+        segmentation=segmentation_provenance,
     )
 
 
@@ -234,7 +243,8 @@ class Experiment:
     `z` and `t` take the same defaults as `analyze` and are passed through to
     every file in the batch, so a file needing an explicit channel mapping,
     or a non-default Z/T selection, is reachable from `Experiment` and not
-    only from a direct `analyze()` call.
+    only from a direct `analyze()` call. `segmentation` and `mask_cache` are
+    likewise passed through to every file in the batch.
     """
 
     pixel_size_um: float | None = None
@@ -242,6 +252,8 @@ class Experiment:
     projection: str = "single"
     z: int = 0
     t: int = 0
+    segmentation: str | Any = "auto"
+    mask_cache: str | Path | None = None
     conditions: dict[str, list[str]] = field(default_factory=dict)
 
     def add_condition(self, name: str, paths: list[str]):
@@ -258,6 +270,8 @@ class Experiment:
                     projection=self.projection,
                     z=self.z,
                     t=self.t,
+                    segmentation=self.segmentation,
+                    mask_cache=self.mask_cache,
                 )
                 for p in paths
             ]

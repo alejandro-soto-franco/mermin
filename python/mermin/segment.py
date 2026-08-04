@@ -1,26 +1,71 @@
-"""Cell segmentation: Cellpose for nuclei, watershed for cell bodies."""
+"""Cell segmentation: a backend protocol for nuclei, watershed for cell bodies."""
+
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 from scipy import ndimage
 from skimage import measure, segmentation, morphology
 
+from mermin.backends import SegmentationBackend, resolve_backend
+from mermin.maskcache import load_mask, mask_cache_key, store_mask
 
-def segment_nuclei(dapi: np.ndarray, cellpose_model: str = "nuclei", diameter: float | None = None):
-    """Segment nuclei from DAPI channel using Cellpose.
+
+def segment_nuclei_with_provenance(
+    plane: np.ndarray,
+    backend: str | SegmentationBackend = "auto",
+    *,
+    mask_cache: str | Path | None = None,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Segment nuclei, returning the mask and a record of how it was produced.
 
     Args:
-        dapi: 2D array, normalized DAPI channel.
-        cellpose_model: Cellpose model name.
-        diameter: Expected nuclear diameter in pixels. None for auto-detect.
+        plane: 2D array, the normalised nuclear channel.
+        backend: "auto", "cellpose", "threshold", or a SegmentationBackend.
+        mask_cache: Directory for cached masks. None writes nothing.
 
     Returns:
-        2D integer array: instance segmentation mask (0 = background).
+        (mask, provenance) where mask is a 2D int32 instance mask with 0 as
+        background, and provenance names the backend, its version, its
+        configuration, the mechanism that selected it, the cache outcome and
+        the nucleus count.
     """
-    from cellpose import models
+    resolved, mechanism = resolve_backend(backend)
 
-    model = models.Cellpose(model_type=cellpose_model, gpu=False)
-    masks, _, _, _ = model.eval([dapi], diameter=diameter, channels=[0, 0])
-    return masks[0].astype(np.int32)
+    outcome = "disabled"
+    mask = None
+    key = None
+    if mask_cache is not None:
+        key = mask_cache_key(plane, resolved)
+        mask = load_mask(mask_cache, key)
+        outcome = "hit" if mask is not None else "miss"
+
+    if mask is None:
+        mask = resolved.segment(plane)
+        if mask_cache is not None and key is not None:
+            store_mask(mask_cache, key, mask)
+
+    provenance = {
+        "backend": resolved.name,
+        "version": resolved.version(),
+        "config": resolved.config(),
+        "mechanism": mechanism,
+        "cache": outcome,
+        "n_nuclei": int(np.count_nonzero(np.unique(mask))),
+    }
+    return mask, provenance
+
+
+def segment_nuclei(
+    plane: np.ndarray,
+    backend: str | SegmentationBackend = "auto",
+    *,
+    mask_cache: str | Path | None = None,
+) -> np.ndarray:
+    """Segment nuclei from the nuclear channel. See
+    `segment_nuclei_with_provenance` for the record of how the mask was made.
+    """
+    return segment_nuclei_with_provenance(plane, backend, mask_cache=mask_cache)[0]
 
 
 def segment_cell_bodies(

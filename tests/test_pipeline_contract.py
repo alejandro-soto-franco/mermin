@@ -168,6 +168,7 @@ def test_summary_omits_internal_katic_when_the_column_is_absent():
         ldg_params={},
         persistence={"pairs": []},
         ingest={},
+        segmentation={},
     )
     summary = result.summary()
     assert "psi_2" not in summary
@@ -189,8 +190,41 @@ def test_summary_reports_internal_katic_when_the_column_is_present():
         ldg_params={},
         persistence={"pairs": []},
         ingest={},
+        segmentation={},
     )
     assert "mean |psi_2| = 0.500" in result.summary()
+
+
+def test_analyze_takes_segmentation_and_mask_cache():
+    from mermin.pipeline import analyze
+
+    parameters = inspect.signature(analyze).parameters
+    assert parameters["segmentation"].default == "auto"
+    assert parameters["mask_cache"].default is None
+
+
+def test_analyze_no_longer_takes_cellpose_diameter():
+    """Removed rather than deprecated: backend parameters belong on the
+    backend."""
+    from mermin.pipeline import analyze
+
+    assert "cellpose_diameter" not in inspect.signature(analyze).parameters
+
+
+def test_experiment_carries_the_segmentation_settings():
+    from mermin.pipeline import Experiment
+
+    experiment = Experiment()
+    assert experiment.segmentation == "auto"
+    assert experiment.mask_cache is None
+
+
+def test_analysis_result_carries_segmentation_provenance():
+    from dataclasses import fields
+
+    from mermin.pipeline import AnalysisResult
+
+    assert "segmentation" in {f.name for f in fields(AnalysisResult)}
 
 
 def test_bare_import_needs_nothing_heavy():
