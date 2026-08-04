@@ -136,7 +136,11 @@ def analyze(
     for label in labels:
         c = contours[label].mean(axis=0)
         centroids_px.append(c)
-    centroids_arr = np.array(centroids_px) if centroids_px else np.zeros((0, 2))
+    centroids_arr = (
+        np.ascontiguousarray(centroids_px, dtype=np.float64)
+        if centroids_px
+        else np.zeros((0, 2), dtype=np.float64)
+    )
 
     # Stage 3: Shape analysis (Rust)
     contour_arrays = [contours[label] for label in labels]
@@ -155,7 +159,7 @@ def analyze(
     ny, nx = theta_field.shape
 
     defects = _native.detect_defects(
-        theta_field.ravel().tolist(), nx, ny, 2, np.pi / 2
+        np.ascontiguousarray(theta_field.ravel(), dtype=np.float64), nx, ny, 2, np.pi / 2
     )
 
     # Stage 6: Correlations (Rust)
@@ -169,8 +173,8 @@ def analyze(
             cell_thetas.append(float(theta_field[row, col]))
 
         correlations = _native.orientational_correlation(
-            centroids_arr.tolist(),
-            cell_thetas,
+            centroids_arr,
+            np.asarray(cell_thetas, dtype=np.float64),
             2,
             max(nx, ny) * pixel_size_um * 0.5,
             20,
@@ -184,12 +188,14 @@ def analyze(
 
     # Stage 7: Frank energy + theory (Rust)
     frank = _native.frank_energy(
-        theta_field.ravel().tolist(), nx, ny, pixel_size_um
+        np.ascontiguousarray(theta_field.ravel(), dtype=np.float64), nx, ny, pixel_size_um
     )
 
     xi = correlations.get("correlation_length", 10.0)
     s_values = [sr.get("elongation", 0.0) for sr in shape_results]
-    ldg = _native.estimate_ldg_params(s_values, xi, pixel_size_um)
+    ldg = _native.estimate_ldg_params(
+        np.asarray(s_values, dtype=np.float64), xi, pixel_size_um
+    )
 
     # Build per-cell DataFrame
     records = []
