@@ -1,0 +1,203 @@
+"""Golden records over the corpus, and the comparator that reads them.
+
+This module never imports `mermin`. It reads an `AnalysisResult` by attribute,
+so a golden can be built and compared without the analysis package installed,
+and so the corpus tooling stays independent of the code it measures.
+"""
+
+from dataclasses import dataclass
+from typing import Any
+
+import math
+
+SCHEMA_VERSION = "1"
+
+# Relative tolerances. The split is measured rather than stylistic.
+#
+# `frank` and the field summaries come from the structure tensor of the fibre
+# plane and never touch a segmentation mask, so they reproduce to the last bit
+# on every supported scikit-image version. They are pinned tightly.
+#
+# The per-cell aggregates, `correlations` and `ldg_params` derive from contours
+# and centroids, so they do touch the mask, and
+# `skimage.segmentation.watershed` changed its boundary tie-breaking between
+# 0.24 and 0.25: 5 pixels in 65536 moved on a phantom and 31 in 65536 on real
+# IDR data, always boundary slivers between adjacent nuclei. A loose tolerance
+# absorbs that without hiding a real change.
+TIGHT = 1e-12
+LOOSE = 1e-3
+
+_CELL_COLUMNS = ("area", "perimeter", "shape_index", "elongation")
+
+
+@dataclass(frozen=True)
+class Difference:
+    path: str
+    golden: Any
+    current: Any
+    kind: str
+    tolerance: float | None = None
+
+    def __str__(self) -> str:
+        if self.kind == "environment":
+            return f"{self.path}: recorded {self.golden!r}, now {self.current!r}"
+        return (
+            f"{self.path}: expected {self.golden!r}, got {self.current!r}"
+            + (f" (relative tolerance {self.tolerance})" if self.tolerance else "")
+        )
+
+
+def _summarise(frame, column: str) -> dict[str, float]:
+    series = frame[column]
+    return {
+        "min": float(series.min()),
+        "max": float(series.max()),
+        "mean": float(series.mean()),
+    }
+
+
+def build_record(
+    result: Any,
+    *,
+    entry: str,
+    invocation: dict[str, Any],
+    environment: dict[str, str],
+) -> dict[str, Any]:
+    """A golden record for one analysed entry."""
+    theta = result.fields["theta"]
+    coherence = result.fields["coherence"]
+
+    cells: dict[str, Any] = {}
+    for column in _CELL_COLUMNS:
+        if column in result.cells.columns:
+            cells[column] = _summarise(result.cells, column)
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "entry": entry,
+        "environment": dict(environment),
+        "invocation": dict(invocation),
+        "ingest": {
+            "roles": {
+                role: {"index": r["index"], "mechanism": r["mechanism"]}
+                for role, r in result.ingest["roles"].items()
+            },
+            "pixel_size_um": result.ingest["pixel_size_um"],
+            "projection": result.ingest["projection"],
+        },
+        "segmentation": {
+            "backend": result.segmentation["backend"],
+            "version": result.segmentation["version"],
+            "config": dict(result.segmentation["config"]),
+            "mechanism": result.segmentation["mechanism"],
+        },
+        "counts": {
+            "nuclei": int(result.segmentation["n_nuclei"]),
+            "cells": int(len(result.cells)),
+            "defects": int(len(result.defects)),
+        },
+        "numerics": {
+            "frank": {k: float(v) for k, v in result.frank.items()},
+            "fields": {
+                "shape": list(theta.shape),
+                "optimal_sigma": float(result.fields["optimal_sigma"]),
+                "theta_mean": float(theta.mean()),
+                "theta_std": float(theta.std()),
+                "coherence_mean": float(coherence.mean()),
+                "coherence_std": float(coherence.std()),
+            },
+            "correlations": {
+                "correlation_length": float(result.correlations["correlation_length"]),
+                "n_bins": len(result.correlations.get("r_bins", [])),
+            },
+            "ldg_params": {k: float(v) for k, v in result.ldg_params.items()},
+            "cells": cells,
+        },
+    }
+
+
+_MISSING = object()
+
+
+def _close(golden: Any, current: Any, tolerance: float) -> bool:
+    if isinstance(golden, bool) or isinstance(current, bool):
+        return golden == current
+    if not isinstance(golden, (int, float)) or not isinstance(current, (int, float)):
+        return golden == current
+    # NaN never compares equal, including to itself. A NaN where a number was
+    # is a defect, so it must surface as a difference rather than pass.
+    if math.isnan(golden) or math.isnan(current):
+        return False
+    if math.isinf(golden) or math.isinf(current):
+        return golden == current
+    return math.isclose(golden, current, rel_tol=tolerance, abs_tol=0.0)
+
+
+def _walk(golden: Any, current: Any, path: str, kind: str, tolerance: float | None,
+          out: list[Difference]) -> None:
+    if isinstance(golden, dict):
+        if not isinstance(current, dict):
+            out.append(Difference(path, golden, current, kind, tolerance))
+            return
+        for key in sorted(set(golden) | set(current)):
+            _walk(
+                golden.get(key, _MISSING),
+                current.get(key, _MISSING),
+                f"{path}.{key}" if path else str(key),
+                kind,
+                tolerance,
+                out,
+            )
+        return
+    if golden is _MISSING or current is _MISSING:
+        out.append(Difference(path, golden, current, kind, tolerance))
+        return
+    if tolerance is None:
+        if golden != current:
+            out.append(Difference(path, golden, current, kind, None))
+        return
+    if not _close(golden, current, tolerance):
+        out.append(Difference(path, golden, current, kind, tolerance))
+
+
+# Which tolerance each branch of `numerics` takes. Anything not named here is
+# compared exactly, so a new field added to a record fails loudly rather than
+# being silently unchecked.
+_NUMERIC_TOLERANCE = {
+    "frank": TIGHT,
+    "fields": TIGHT,
+    "correlations": LOOSE,
+    "ldg_params": LOOSE,
+    "cells": LOOSE,
+}
+
+
+def compare(golden: dict[str, Any], current: dict[str, Any]) -> list[Difference]:
+    """Every way `current` differs from `golden`.
+
+    An `environment` difference is reported with kind `environment` so a caller
+    can note it without failing: a recorded dependency version explains a
+    difference elsewhere, it is not one itself.
+    """
+    out: list[Difference] = []
+
+    _walk(golden.get("environment", {}), current.get("environment", {}),
+          "environment", "environment", None, out)
+
+    for section in ("schema_version", "entry", "invocation", "ingest",
+                    "segmentation", "counts"):
+        _walk(golden.get(section, _MISSING), current.get(section, _MISSING),
+              section, "exact", None, out)
+
+    g_num = golden.get("numerics", {})
+    c_num = current.get("numerics", {})
+    for branch in sorted(set(g_num) | set(c_num)):
+        _walk(
+            g_num.get(branch, _MISSING),
+            c_num.get(branch, _MISSING),
+            f"numerics.{branch}",
+            "tolerance",
+            _NUMERIC_TOLERANCE.get(branch),
+            out,
+        )
+    return out
