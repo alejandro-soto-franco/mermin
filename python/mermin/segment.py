@@ -89,7 +89,17 @@ def segment_cell_bodies(
     # Energy landscape: inverted vimentin intensity
     thresh = np.percentile(vimentin[vimentin > 0], 20) if np.any(vimentin > 0) else 0.1
     foreground = vimentin > thresh
-    foreground = morphology.binary_closing(foreground, morphology.disk(3))
+    # `closing`, not the deprecated `binary_closing`: `mode="ignore"` is
+    # load-bearing, not cosmetic. `binary_closing` treats pixels outside the
+    # image as True for its erosion half and False for its dilation half
+    # (its only mode, added in 0.23); `closing`'s default border mode is
+    # "reflect", which mirrors nearby data instead. `mode="ignore"` reproduces
+    # `binary_closing`'s fixed border exactly (confirmed against the 0.26
+    # source: both convert "ignore" to the same fixed border value), so
+    # foreground touching the edge of the frame closes the same way it always
+    # did. See tests/test_segment_cell_bodies.py for the border-touching
+    # fixture that pins this.
+    foreground = morphology.closing(foreground, morphology.disk(3), mode="ignore")
 
     distance = ndimage.distance_transform_edt(foreground)
     energy = -distance
