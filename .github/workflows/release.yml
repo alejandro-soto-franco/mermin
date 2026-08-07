@@ -91,6 +91,11 @@ jobs:
           path: dist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # A re-run of this workflow, which a tag force-push triggers, would
+          # otherwise fail with "400 File already exists" against a version
+          # PyPI already holds.
+          skip-existing: true
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
